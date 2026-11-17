@@ -14,16 +14,16 @@
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white">
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-3DA639?style=flat-square">
   <img alt="Version 0.1.0" src="https://img.shields.io/badge/version-0.1.0-5EEAD4?style=flat-square">
-  <img alt="Local first" src="https://img.shields.io/badge/local--first-no%20upload-0F766E?style=flat-square">
+  <img alt="Local first" src="https://img.shields.io/badge/local--first-0F766E?style=flat-square">
 </p>
 
-**拉片单（ShotSheet）把一条对标短视频拆成能照拍的分镜表：每镜都有原片时间码、时长、景别、机位、运镜、道具和场景，再按抖音 / 小红书 / 视频号的规则检查字幕安全区与开场钩子，并直接导出一份能进剪映的参考时间线。** 全程在本机跑，不上传视频，不需要登录。
+**拉片单（ShotSheet）把一条对标短视频拆成能照拍的分镜表：每镜都有原片时间码、时长、景别、机位、运镜、道具和场景，再按抖音 / 小红书 / 视频号的规则检查字幕安全区与开场钩子，并直接导出一份能进剪映的参考时间线。** 分析、规则校验和导出都在本机跑，不需要登录。只有勾选视觉描述时，每个镜头会向所选视觉接口（火山方舟或阿里云百炼）发送 3 张抽帧 JPEG；不勾选视觉描述则完全本机处理，不向外部接口发送任何画面。
 
 ## 为什么做它
 
 照着一条爆款拍第二条，最费时间的不是“看懂”，而是把视频翻译成可执行的拍摄计划。人工做法是暂停、回拖两秒、再暂停，把机位、景别、道具和每镜停多久记下来；一条 60 秒的片子要 1–2 小时，最后得到的还是一页只有自己看得懂的笔记。
 
-逐镜拆解这件事，[rea-video](https://github.com/JuneYaooo/rea-video) 已经先做成了产品。但它的产物 `VIDEO.md` / `report.html` 是写给 Agent 和开发者看的中间格式；创作者拿到手，仍要自己翻译成摄影能照着拍的分镜表。拉片单补的是这一层执行契约：字段固定、每条带 `tc_in`、平台规则有 id、同一套字段可以沉淀成可复用的 Skill 与模板。拆解是别人先做的，我们认；我们多做的是三平台规则、可逐帧对账的时间码，以及剪映工程导出。
+逐镜拆解这件事，[rea-video](https://github.com/JuneYaooo/rea-video) 已经先做成了产品。但它的产物 `VIDEO.md` / `report.html` 是写给 Agent 和开发者看的中间格式；创作者拿到手，仍要自己翻译成摄影能照着拍的分镜表。拉片单补的是这一层执行契约：字段固定、每条带 `tc_in`、平台规则有 id、同一套字段可以沉淀成可复用的 Skill（模板库属于 v0.2 路线，v0.1 未实现）。拆解是别人先做的，我们认；我们多做的是三平台规则、可逐帧对账的时间码，以及剪映工程导出。
 
 ## 快速开始
 
@@ -46,7 +46,7 @@ ffmpeg -y \
 uv run shotsheet analyze demo.mp4 --platform douyin -o shots.json
 ```
 
-终端会打印 `3 shots -> shots.json`。用浏览器打开同目录的 `shots.html`，就是 A4 分镜表。
+终端会打印 `3 shots -> shots.json (sheet: shots.html)`。用浏览器打开同目录的 `shots.html`，就是 A4 分镜表。
 
 再打开本地单页界面：
 
@@ -55,7 +55,7 @@ uv run shotsheet serve
 # 浏览器访问 http://127.0.0.1:8787
 ```
 
-页面里可以直接改景别、机位、运镜、道具与场景，改动立即写回 `shots.json`。勾选视觉描述需要火山方舟或阿里云百炼的 Key（`ARK_API_KEY` / `DASHSCOPE_API_KEY`），也可以在页面里临时粘贴；不勾选也能只用切镜与规则校验。
+页面里可以直接改景别、机位、运镜、道具与场景。先用「打开已有 shots.json」载入 `analyze` 生成的文件，改动就会立即写回那个文件，页面同时显示当前写入路径；在页面里直接分析的视频结果则写入一个临时 `shots.json`，路径同样会显示出来。勾选视觉描述需要火山方舟或阿里云百炼的 Key（`ARK_API_KEY` / `DASHSCOPE_API_KEY`），也可以在页面里临时粘贴；不勾选也能只用切镜与规则校验。
 
 ## 演示
 
@@ -80,8 +80,8 @@ uv run shotsheet serve
 
 单进程、单目录、无数据库。每个任务一个临时工作目录，跑完可删。
 
-- `pipeline/analyze.py`：`ffprobe` 读时长与帧率，`scenedetect` 找镜头边界，可选 `faster-whisper` 转写字幕。
-- `pipeline/describe.py`：逐镜抽帧，调用 OpenAI 兼容的视觉接口填景别/机位/运镜/道具/场景，默认豆包，可切通义千问 VL。
+- `pipeline/analyze.py`：`scenedetect` 找镜头边界，并从视频流读取时长与帧率；可选 `faster-whisper` 转写字幕。
+- `pipeline/describe.py`：用 `ffmpeg` 逐镜抽 3 帧，调用 OpenAI 兼容的视觉接口填景别/机位/运镜/道具/场景，默认豆包，可切通义千问 VL。
 - `pipeline/rules.py`：只读 `rules/cn-platforms.yaml`，校验时长、开场钩子与计划字幕区，不硬编码平台数字。
 - `render/shotlist_html.py`：A4 分镜表，保留时间码、字幕、规则三列；网页内联编辑复用同一份表格标记。
 - `render/jianying.py`：把 `tc_in` / `tc_out` 换算成微秒，生成剪映 draft 工程目录。
@@ -107,7 +107,6 @@ uv run shotsheet serve
 ShotSheet
 ├─ source   file, duration_ms, fps, platform, caption_box
 ├─ rules    cn-platforms.yaml#douyin | #xiaohongshu | #shipinhao
-├─ template 可选的模板 id
 └─ shots[]
    ├─ index, tc_in "00:00:03:12", tc_out, duration_ms
    ├─ shot_size 特写|近景|中景|全景|远景
@@ -137,8 +136,8 @@ ShotSheet
 | 本地 ASR 字幕 | 已实现 | `--transcribe`，首次会下载 faster-whisper 模型 |
 | 逐镜视觉描述 | 已实现 | 豆包 `doubao-seed-2-1-pro-260915`，可切通义 `qwen3-vl-plus` |
 | 三平台规则 | 已实现 | 时长上限、开场钩子、计划字幕区；规则唯一来源是 YAML |
-| 网页内联编辑 | 已实现 | 改动立即写回 `shots.json`，重新跑规则 |
-| A4 分镜表 | 已实现 | `shots.html`，A4 打印版式 |
+| 网页内联编辑 | 已实现 | 打开已有 `shots.json` 后改动写回该文件；页面显示当前写入路径，并重新跑规则 |
+| A4 分镜表 | 已实现 | `shots.html`，A4 打印版式；12 镜可排在一页 |
 | 剪映 draft 导出 | 已实现 | 明文 `draft_content.json`，每镜一段，微秒时间码 |
 | 批量队列 / 共享模板 / 多账号 | 未实现（v0.2 路线） | 见「付费」 |
 
@@ -146,11 +145,11 @@ ShotSheet
 
 `src/shotsheet/rules/cn-platforms.yaml` 是平台规则的唯一来源。时长上下限引用平台公开规则页；开场钩子与字幕安全区是社区长期观察的区间，文件里标为 `heuristic`，不是平台公布的精确规范。
 
-计划字幕区默认是 `top 72% / bottom 80% / left 6% / right 88%`，一个 8% 高的横条。这个默认值同时落在抖音、小红书、视频号三套 UI 边距之内，因此不会在默认情况下报越界。CLI 和网页都可以改：
+计划字幕区默认是 `top 72% / bottom 80% / left 6% / right 88%`，一个 8% 高的横条。这个默认值同时落在抖音、小红书、视频号三套 UI 边距之内，因此不会在默认情况下报越界。计划区本身越出平台安全区时按 `error` 处理；下面的第二条命令因此退出码为 1。CLI 和网页都可以改：
 
 ```bash
 uv run shotsheet analyze demo.mp4 --platform xiaohongshu --caption-box 70,80,8,86
-uv run shotsheet rules shots.json --caption-box 88,100,4,96   # 越界示例，会报错
+uv run shotsheet rules shots.json --caption-box 88,100,4,96   # 越界示例，退出码 1
 ```
 
 诚实说明：v0.1 无法识别已经烧进画面里的字幕。安全区校验的对象是 `source.caption_box` 这块**计划**字幕区，而不是原片文字的实际包围盒。规则 id 写成 `planned_caption_safe_area` 就是为了不造成误解。
@@ -170,14 +169,14 @@ uv run shotsheet export shots.json --jianying-dir ./jianying --video demo.mp4
 ```
 jianying/
 ├─ root_meta_info.json
-└─ demo-shotsheet/
+└─ demo-douyin-9x16/
    ├─ draft_content.json
    └─ draft_meta_info.json
 ```
 
-把 `<draft-name>` 目录复制进剪映的 `com.lveditor.draft` 目录，并把 `root_meta_info.json` 里的 `all_draft_store` 条目合并进该目录的同名文件，即可注册工程。也可以直接把 `--jianying-dir` 指向 `com.lveditor.draft`：工具会按 draft id 合并 `root_meta_info.json`，不会清掉已有工程；如果同名目录里已经是另一个 draft id，导出会拒绝覆盖并提示换一个 `--draft-name`。草稿里每个镜头一段，`target_timerange` 与 `source_timerange` 都以微秒记录；没有字幕时只有视频轨，有 ASR 字幕时追加一条文字轨，并按计划字幕区放置。
+把 `<draft-name>` 目录复制进剪映的 `com.lveditor.draft` 目录，并把 `root_meta_info.json` 里的 `all_draft_store` 条目合并进该目录的同名文件，即可注册工程。默认 draft 目录名带上平台与画幅（例如 `demo-douyin-9x16`、`demo-xiaohongshu-3x4`），同一条源片分别导出抖音和小红书时不会互相覆盖；draft id 也把平台与画幅算进哈希。也可以直接把 `--jianying-dir` 指向 `com.lveditor.draft`：工具会按 draft id 合并 `root_meta_info.json`，不会清掉已有工程；如果同名目录里已经是另一个 draft id，导出会拒绝覆盖并提示换一个 `--draft-name`。草稿里每个镜头一段，`target_timerange` 与 `source_timerange` 都以微秒记录；没有字幕时只有视频轨，有 ASR 字幕时追加一条文字轨，并按计划字幕区放置。
 
-**目标版本**：明文 `draft_content.json`，`version: 360000`、`new_version: "75.0.0"`，对应剪映专业版 5.x/6.x 读取的格式。**剪映 10.1 把时间线存进加密的 `draft_info.json`，本工具不写、不解密这个文件**，因此不要把这份明文工程当成 10.1 可直接导入的工程。本次构建没有在运行中的剪映里做导入实测，兼容性说明见 [docs/demo-results.json](docs/demo-results.json)；切点对齐是按 `tc_in`/`tc_out` 逐段换算微秒得到的，不依赖估计。
+**目标版本**：明文 `draft_content.json`，`version: 360000`、`new_version: "75.0.0"`，对应剪映专业版 5.x/6.x 读取的格式。**剪映 10.1 把时间线存进加密的 `draft_info.json`，本工具不写、不解密这个文件**，因此不要把这份明文工程当成 10.1 可直接导入的工程。本机装有剪映专业版 10.1.0（`/Applications/VideoFusion-macOS.app`），但它只读写加密工程，所以本次没有把明文 5.x/6.x 工程导入运行中的剪映：m3 的「实测导入」与「切点误差 <200ms」两项验收均为 **UNVERIFIED**。切点时间码是按 `tc_in`/`tc_out` 逐段换算微秒得到的，不依赖估计；兼容性记录见 [docs/demo-results.json](docs/demo-results.json)。
 
 ## 付费
 
@@ -205,6 +204,7 @@ v0.1 的本地单机版不设付费墙，MIT 开源，拉片、规则校验和�
 - 无法定位原片里已经烧进画面的字幕；字幕安全区只校验计划字幕区。
 - 剪映导出面向明文 `draft_content.json` 的版本；10.1 的加密 `draft_info.json` 不在范围内。
 - 平台规则里的钩子窗口与安全区是社区经验值，平台改版后需要改 YAML；`duration_s` 来自公开规则页，但发布时仍以发布页提示为准。
+- 在 macOS 上同时加载 `scenedetect`/PyAV 和系统 `libavdevice` 时，stderr 可能出现 `objc[...]: Class ... is implemented in both ...` 的重复类警告。这是动态库加载提示，不影响切镜或导出结果。
 
 ## 开发
 

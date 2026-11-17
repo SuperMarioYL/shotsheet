@@ -178,14 +178,15 @@ def test_out_of_margin_caption_box_reports_every_caption_shot() -> None:
     assert all(shot.caption.safe_area_ok is False for shot in report.sheet.shots)
 
 
-def test_out_of_margin_caption_box_without_captions_is_sheet_warning() -> None:
+def test_out_of_margin_caption_box_without_captions_is_a_sheet_error() -> None:
+    """An invalid planned band fails the CLI even before captions exist."""
     outside = CaptionBox(top=88, bottom=100, left=4, right=96)
     report = apply_platform_rules(_sheet(caption_box=outside))
 
     findings = [v for v in report.violations if v.rule_id == "douyin.planned_caption_safe_area"]
     assert len(findings) == 1
     assert findings[0].shot_index is None
-    assert findings[0].severity == "warning"
+    assert findings[0].severity == "error"
 
 
 def test_violation_serializes_for_the_web_payload() -> None:
@@ -251,3 +252,17 @@ def test_cli_caption_box_override_fires_a_finding(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert "planned_caption_safe_area" in result.output
+
+
+def test_cli_caption_box_example_errors_on_a_captionless_quickstart_sheet(
+    tmp_path: Path,
+) -> None:
+    """The README example runs on a freshly analysed sheet, before any captions."""
+    path = tmp_path / "shots.json"
+    path.write_text(_sheet(shot_ms=(2000, 2000, 2000)).model_dump_json(), encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["rules", str(path), "--caption-box", "88,100,4,96"])
+
+    assert result.exit_code == 1
+    assert "planned_caption_safe_area" in result.output
+    assert "1 error(s)" in result.output

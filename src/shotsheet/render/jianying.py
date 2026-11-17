@@ -46,7 +46,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from shotsheet.pipeline.rules import load_rulebook
+from shotsheet.pipeline.rules import PlatformProfile, load_rulebook
 from shotsheet.schema import CaptionBox, Platform, ShotSheet, parse_timecode
 
 DRAFT_VERSION = 360000
@@ -125,7 +125,7 @@ def export_jianying_draft(
         if video_path is not None
         else sheet.source.file
     )
-    draft_id = _draft_id(sheet, plan.draft_name)
+    draft_id = _draft_id(sheet, plan)
     content = _draft_content(
         sheet,
         plan,
@@ -169,13 +169,13 @@ def export_jianying_draft(
 
 def plan_jianying_draft(sheet: ShotSheet, *, draft_name: str | None = None) -> DraftPlan:
     """Return the track/segment plan for SHEET without writing anything."""
-    name = (draft_name or _default_draft_name(sheet)).strip()
+    profile = load_rulebook().platforms[sheet.source.platform]
+    name = (draft_name or _default_draft_name(sheet, profile)).strip()
     if not name.strip():
         raise ValueError("draft name must not be empty")
     if "/" in name or "\\" in name or name in {".", ".."}:
         raise ValueError("draft name must be a single folder name")
 
-    profile = load_rulebook().platforms[sheet.source.platform]
     canvas_width, canvas_height = _canvas_size(profile.aspect_ratio)
 
     video_segments: list[PlannedSegment] = []
@@ -257,16 +257,26 @@ def describe_draft_plan(plan: DraftPlan, root: str | Path) -> str:
     return "\n".join(lines)
 
 
-def _default_draft_name(sheet: ShotSheet) -> str:
+def _default_draft_name(sheet: ShotSheet, profile: PlatformProfile) -> str:
+    # Platform and aspect are part of the name: the same clip exported for
+    # Douyin (1080x1920) and Xiaohongshu (1080x1440) must not collide in a
+    # draft root, which lists projects by folder name.
     stem = Path(sheet.source.file).stem or "shotsheet"
-    return f"{stem}-shotsheet"
+    aspect_tag = profile.aspect_ratio.replace(":", "x")
+    return f"{stem}-{sheet.source.platform.value}-{aspect_tag}"
 
 
-def _draft_id(sheet: ShotSheet, draft_name: str) -> str:
+def _draft_id(sheet: ShotSheet, plan: DraftPlan) -> str:
+    # Platform and aspect stay in the key as well, so passing the same explicit
+    # --draft-name for two platforms still yields distinct draft ids and the
+    # overwrite guard fires instead of silently replacing a differently sized
+    # canvas.
     key = "/".join(
         [
             "shotsheet",
-            draft_name,
+            plan.draft_name,
+            plan.platform.value,
+            plan.aspect_ratio,
             sheet.source.file,
             str(sheet.source.duration_ms),
             *(f"{shot.tc_in}-{shot.tc_out}-{shot.duration_ms}" for shot in sheet.shots),

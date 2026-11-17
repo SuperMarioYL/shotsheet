@@ -6,10 +6,13 @@ local path, and returns the sheet JSON plus a server-rendered shot table.
 
 Two write paths matter for m2:
 
-- ``POST /analyze`` runs the pipeline and stores the resulting sheet on disk.
-- ``PUT /sheet`` validates a complete sheet with the pydantic contract, re-runs
-  the platform rules, and writes it back to ``shots.json``. The web page calls
-  it whenever an inline cell changes, so edits are saved immediately.
+- ``POST /analyze`` runs the pipeline and stores the resulting sheet in a
+  scratch ``shots.json``.
+- ``POST /sheet/open`` loads an existing ``shots.json`` and points the editor at
+  that file. ``PUT /sheet`` validates a complete sheet with the pydantic
+  contract, re-runs the platform rules, and writes it back to the current file:
+  the opened sheet when there is one, otherwise the scratch file. The web page
+  calls it whenever an inline cell changes, so edits are saved immediately.
 
 An API key pasted into the page travels only in the request body; the server
 uses it for that call and never writes or echoes it.
@@ -54,23 +57,41 @@ app = FastAPI(
 
 
 class SheetStore:
-    """The one sheet the local page edits, persisted as ``shots.json``.
+    """The one sheet the local page edits, persisted as JSON on disk.
 
-    The file lives in a process-lifetime temporary directory: local-only, no
-    database, and gone when the server exits.
+    It starts on a process-lifetime temporary ``shots.json``. ``open`` points it
+    at an existing sheet the user chose, so ``PUT /sheet`` writes edits back to
+    that file. A new analysis always returns to a fresh temporary file, which
+    keeps an opened user sheet from being overwritten by an unrelated run.
     """
 
     def __init__(self) -> None:
         self._dir = tempfile.TemporaryDirectory(prefix="shotsheet-sheets-")
-        self.path = Path(self._dir.name) / "shots.json"
+        self._temp_path = Path(self._dir.name) / "shots.json"
+        self._path = self._temp_path
         self._lock = threading.Lock()
+
+    @property
+    def path(self) -> Path:
+        return self._path
+
+    def reset(self) -> None:
+        """Return to the scratch file used for fresh analysis results."""
+        with self._lock:
+            self._path = self._temp_path
+
+    def open(self, path: Path) -> None:
+        """Edit PATH from now on; the caller has already validated it."""
+        with self._lock:
+            self._path = path
 
     def save(self, sheet: ShotSheet) -> None:
         payload = sheet.model_dump_json(indent=2) + "\n"
         with self._lock:
-            temporary = self.path.with_name(".shots.json.tmp")
+            target = self._path
+            temporary = target.with_name(target.name + ".tmp")
             temporary.write_text(payload, encoding="utf-8")
-            os.replace(temporary, self.path)
+            os.replace(temporary, target)
 
 
 SHEET_STORE = SheetStore()
@@ -97,6 +118,32 @@ def config() -> dict[str, object]:
             for provider in PROVIDERS.values()
         ],
     }
+
+
+@app.post("/sheet/open")
+def open_sheet(
+    body: Annotated[dict, Body(description='{"path": "/path/to/shots.json"}')],
+) -> JSONResponse:
+    """Load an existing sheet and make it the file ``PUT /sheet`` writes to."""
+    raw_path = str(body.get("path") or "").strip()
+    if not raw_path:
+        raise HTTPException(status_code=400, detail="请填写 shots.json 的路径。")
+
+    path = Path(raw_path).expanduser()
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"找不到 {path}。")
+    try:
+        sheet = ShotSheet.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"不是可用的分镜表 JSON：{exc}") from exc
+
+    try:
+        report = apply_platform_rules(sheet)
+    except RulesError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    SHEET_STORE.open(path.resolve())
+    return JSONResponse(_payload(report, warnings=[]))
 
 
 @app.post("/analyze")
@@ -200,7 +247,10 @@ def put_sheet(body: Annotated[dict, Body(description="完整 ShotSheet JSON")]) 
     except RulesError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    SHEET_STORE.save(report.sheet)
+    try:
+        SHEET_STORE.save(report.sheet)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"无法写入 {SHEET_STORE.path}：{exc}") from exc
     return JSONResponse(_payload(report, warnings=[]))
 
 
@@ -246,6 +296,9 @@ def _analyse(
     except Exception as exc:  # unexpected decoder/library failures still get a clean message
         raise HTTPException(status_code=500, detail=f"分析失败：{exc}") from exc
 
+    # A new analysis is a scratch result: never overwrite a sheet the user
+    # explicitly opened for editing.
+    SHEET_STORE.reset()
     SHEET_STORE.save(report.sheet)
     return _payload(report, warnings)
 

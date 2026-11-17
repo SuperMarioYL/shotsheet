@@ -16,36 +16,42 @@ from shotsheet.pipeline.rules import Violation
 from shotsheet.schema import Camera, Movement, ShotSheet, ShotSize
 
 _STYLES = """
-  @page { size: A4; margin: 14mm; }
+  @page { size: A4; margin: 10mm; }
   body {
     margin: 0;
     color: #111;
     font-family: -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
-    font-size: 11pt;
+    font-size: 9pt;
+    line-height: 1.35;
   }
-  header { margin-bottom: 8mm; }
-  h1 { margin: 0 0 2mm; font-size: 18pt; }
-  .meta { color: #555; font-size: 9pt; }
+  header { margin-bottom: 3mm; }
+  h1 { margin: 0 0 1mm; font-size: 14pt; }
+  .meta { color: #555; font-size: 7.5pt; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { border: 1px solid #888; padding: 2.5mm 3mm; vertical-align: top; text-align: left; }
-  th { background: #eee; font-size: 9pt; }
+  th, td {
+    border: 1px solid #888;
+    padding: 1.1mm 1.6mm;
+    vertical-align: top;
+    text-align: left;
+  }
+  th { background: #eee; font-size: 7.5pt; }
   thead { display: table-header-group; }
-  tr { break-inside: avoid; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
   .timeline { width: 34%; }
   .caption { width: 38%; }
   .rule { width: 28%; }
   .tc { font-variant-numeric: tabular-nums; }
   .index { color: #555; margin-right: 2mm; }
-  .dur { color: #555; font-size: 9pt; }
-  .vision { margin-top: 1.5mm; font-size: 10pt; }
-  .props { color: #333; font-size: 9pt; margin-top: 1mm; }
+  .dur { color: #555; font-size: 7.5pt; }
+  .vision { margin-top: 0.8mm; font-size: 8pt; }
+  .props { color: #333; font-size: 7.5pt; margin-top: 0.5mm; }
   .caption:empty::after { content: "—"; color: #bbb; }
-  .violation { font-size: 9pt; margin: 0 0 1.5mm; }
+  .violation { font-size: 7.5pt; margin: 0 0 0.8mm; }
   .violation:last-child { margin-bottom: 0; }
   .violation.error { color: #b00020; }
   .violation.warning { color: #8a5300; }
-  .ok { color: #2e6b33; font-size: 9pt; }
-  .sheet-violations { margin: 0 0 6mm; }
+  .ok { color: #2e6b33; font-size: 7.5pt; }
+  .sheet-violations { margin: 0 0 3mm; }
 """
 
 _TABLE = Template(

@@ -14,16 +14,16 @@
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white">
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-3DA639?style=flat-square">
   <img alt="Version 0.1.0" src="https://img.shields.io/badge/version-0.1.0-5EEAD4?style=flat-square">
-  <img alt="Local first" src="https://img.shields.io/badge/local--first-no%20upload-0F766E?style=flat-square">
+  <img alt="Local first" src="https://img.shields.io/badge/local--first-0F766E?style=flat-square">
 </p>
 
-**ShotSheet turns a reference short video into a shot list you can actually shoot from: every shot carries its source timecode, duration, shot size, camera placement, movement, props and scene. It checks the planned subtitle band and opening hook against Douyin, Xiaohongshu and WeChat Channels rules, then exports a reference timeline you can open in Jianying.** Everything runs locally: no upload, no account.
+**ShotSheet turns a reference short video into a shot list you can actually shoot from: every shot carries its source timecode, duration, shot size, camera placement, movement, props and scene. It checks the planned subtitle band and opening hook against Douyin, Xiaohongshu and WeChat Channels rules, then exports a reference timeline you can open in Jianying.** Analysis, rule checks and export run locally; no account is needed. Only when vision is enabled does each shot send three sampled JPEG frames to the chosen vision endpoint (Volcengine Ark or Alibaba Cloud DashScope). With vision off, nothing leaves the machine.
 
 ## Why this exists
 
 When you remake a hit video, the expensive part is not understanding it. It is translating the video into an executable shooting plan. The manual loop is pause, scrub back two seconds, pause again, write down the camera position, framing, props and how long each shot held. A 60-second clip takes one to two hours, and what comes out is a page only its author can read.
 
-Per-shot teardown already exists as a product: [rea-video](https://github.com/JuneYaooo/rea-video) does the hard decomposition. But its `VIDEO.md` / `report.html` output is an intermediate format written for agents and developers. A creator still has to translate it into a shot list a photographer can follow. ShotSheet adds the execution contract: fixed fields, a `tc_in` on every row, rule ids tied to a platform, and a reusable Skill/template shape. The decomposition came first and we credit that work; what we add is the three-platform rule sheet, timecodes you can audit frame by frame, and a Jianying project export.
+Per-shot teardown already exists as a product: [rea-video](https://github.com/JuneYaooo/rea-video) does the hard decomposition. But its `VIDEO.md` / `report.html` output is an intermediate format written for agents and developers. A creator still has to translate it into a shot list a photographer can follow. ShotSheet adds the execution contract: fixed fields, a `tc_in` on every row, rule ids tied to a platform, and a reusable Skill shape (the shared template library ships in v0.2, not v0.1). The decomposition came first and we credit that work; what we add is the three-platform rule sheet, timecodes you can audit frame by frame, and a Jianying project export.
 
 ## Quickstart
 
@@ -46,7 +46,7 @@ ffmpeg -y \
 uv run shotsheet analyze demo.mp4 --platform douyin -o shots.json
 ```
 
-The terminal prints `3 shots -> shots.json`. Open the sibling `shots.html` in a browser to see the A4 shot sheet.
+The terminal prints `3 shots -> shots.json (sheet: shots.html)`. Open the sibling `shots.html` in a browser to see the A4 shot sheet.
 
 Then start the local single-page UI:
 
@@ -55,7 +55,7 @@ uv run shotsheet serve
 # open http://127.0.0.1:8787
 ```
 
-Shot size, camera, movement, props and scene are editable in the page, and every edit is written back to `shots.json` immediately. Vision descriptions need an ARK (Volcengine) or DashScope (Alibaba Cloud) key (`ARK_API_KEY` / `DASHSCOPE_API_KEY`), or you can paste one into the page for that request. Without vision you still get shot detection and rule checks.
+Shot size, camera, movement, props and scene are editable in the page. Use "open an existing shots.json" to load the file `analyze` wrote; edits are then written straight back to that file, and the page shows the current write path. Results analysed in the page go to a scratch `shots.json`, whose path is shown too. Vision descriptions need an ARK (Volcengine) or DashScope (Alibaba Cloud) key (`ARK_API_KEY` / `DASHSCOPE_API_KEY`), or you can paste one into the page for that request. Without vision you still get shot detection and rule checks.
 
 ## Demo
 
@@ -80,8 +80,8 @@ The full commands, input generation, output counts and limitations are in [docs/
 
 One process, one directory, no database. Each job gets a temporary working directory that can be deleted when it finishes.
 
-- `pipeline/analyze.py`: `ffprobe` reads duration and frame rate, `scenedetect` finds shot boundaries, optional `faster-whisper` transcribes captions.
-- `pipeline/describe.py`: samples a frame per shot and calls an OpenAI-compatible vision endpoint to fill shot size, camera, movement, props and scene. Doubao is the default; Qwen VL is the alternative.
+- `pipeline/analyze.py`: `scenedetect` finds shot boundaries and reads duration and frame rate from the video stream; optional `faster-whisper` transcribes captions.
+- `pipeline/describe.py`: extracts three frames per shot with `ffmpeg` and calls an OpenAI-compatible vision endpoint to fill shot size, camera, movement, props and scene. Doubao is the default; Qwen VL is the alternative.
 - `pipeline/rules.py`: reads only `rules/cn-platforms.yaml` and checks duration, opening hook and the planned caption band. No platform number is hardcoded.
 - `render/shotlist_html.py`: the A4 sheet with timeline, captions and rule columns; the web page reuses the same table markup for inline editing.
 - `render/jianying.py`: converts `tc_in` / `tc_out` to microseconds and writes the Jianying draft project.
@@ -107,7 +107,6 @@ A `ShotSheet` is the diffable record of one analysed clip:
 ShotSheet
 ├─ source   file, duration_ms, fps, platform, caption_box
 ├─ rules    cn-platforms.yaml#douyin | #xiaohongshu | #shipinhao
-├─ template optional saved sheet id
 └─ shots[]
    ├─ index, tc_in "00:00:03:12", tc_out, duration_ms
    ├─ shot_size 特写|近景|中景|全景|远景
@@ -137,8 +136,8 @@ Two constraints make quality auditable: every field carries a `tc_in`, so a pers
 | Local ASR captions | Implemented | `--transcribe`; the faster-whisper model downloads on first use |
 | Per-shot vision description | Implemented | Doubao `doubao-seed-2-1-pro-260915`, switchable to Qwen `qwen3-vl-plus` |
 | Three-platform rules | Implemented | Duration cap, opening hook, planned caption band; the YAML is the only source |
-| Inline web editing | Implemented | Edits persist to `shots.json` immediately and re-run the rules |
-| A4 shot sheet | Implemented | `shots.html`, A4 print layout |
+| Inline web editing | Implemented | Open an existing `shots.json` and edits persist to that file; the page shows the current write path and re-runs the rules |
+| A4 shot sheet | Implemented | `shots.html`, A4 print layout; 12 shots fit on one page |
 | Jianying draft export | Implemented | Plaintext `draft_content.json`, one segment per shot, microsecond timing |
 | Batch queue / shared templates / multi-account | Not implemented (v0.2 roadmap) | See Pricing |
 
@@ -146,11 +145,11 @@ Two constraints make quality auditable: every field carries a `tc_in`, so a pers
 
 `src/shotsheet/rules/cn-platforms.yaml` is the single source of platform rules. Duration limits cite public platform policy pages. The opening hook and subtitle safe areas are community-observed ranges marked `heuristic` in the file; they are not published platform specifications.
 
-The default planned caption band is `top 72% / bottom 80% / left 6% / right 88%`, an 8%-tall strip. That rectangle stays inside the UI margins of all three shipped profiles (Douyin, Xiaohongshu, Channels), so the default does not report a violation. Both the CLI and the web page can change it:
+The default planned caption band is `top 72% / bottom 80% / left 6% / right 88%`, an 8%-tall strip. That rectangle stays inside the UI margins of all three shipped profiles (Douyin, Xiaohongshu, Channels), so the default does not report a violation. A planned band outside the platform safe area is an `error`, so the second command below exits 1. Both the CLI and the web page can change it:
 
 ```bash
 uv run shotsheet analyze demo.mp4 --platform xiaohongshu --caption-box 70,80,8,86
-uv run shotsheet rules shots.json --caption-box 88,100,4,96   # out of bounds example
+uv run shotsheet rules shots.json --caption-box 88,100,4,96   # out-of-bounds example, exits 1
 ```
 
 Being explicit about the limitation: v0.1 cannot locate text already burned into the picture. The safe-area check validates `source.caption_box`, the **planned** band this tool would export, not the actual bounding box of text in the source. The rule id is `planned_caption_safe_area` for exactly that reason.
@@ -170,14 +169,14 @@ The output is a Jianying draft root:
 ```
 jianying/
 ├─ root_meta_info.json
-└─ demo-shotsheet/
+└─ demo-douyin-9x16/
    ├─ draft_content.json
    └─ draft_meta_info.json
 ```
 
-Copy the `<draft-name>` folder into Jianying's `com.lveditor.draft` directory and merge the `all_draft_store` entry from `root_meta_info.json` into that directory's file to register the project. You can also point `--jianying-dir` straight at `com.lveditor.draft`: the exporter merges `root_meta_info.json` by draft id and does not erase existing projects. If the folder already holds a different draft id, the export refuses to overwrite it and asks for another `--draft-name`. Each shot is one segment; `target_timerange` and `source_timerange` are both in microseconds. With no captions the draft has only a video track; with ASR captions it adds a text track positioned from the planned caption band.
+Copy the `<draft-name>` folder into Jianying's `com.lveditor.draft` directory and merge the `all_draft_store` entry from `root_meta_info.json` into that directory's file to register the project. The default draft folder name includes platform and aspect (for example `demo-douyin-9x16`, `demo-xiaohongshu-3x4`), so exporting the same clip for Douyin and Xiaohongshu does not overwrite either project; the draft id hashes platform and aspect too. You can also point `--jianying-dir` straight at `com.lveditor.draft`: the exporter merges `root_meta_info.json` by draft id and does not erase existing projects. If the folder already holds a different draft id, the export refuses to overwrite it and asks for another `--draft-name`. Each shot is one segment; `target_timerange` and `source_timerange` are both in microseconds. With no captions the draft has only a video track; with ASR captions it adds a text track positioned from the planned caption band.
 
-**Target version:** plaintext `draft_content.json`, `version: 360000` and `new_version: "75.0.0"`, the format read by Jianying Professional 5.x/6.x. **Jianying 10.1 stores its timeline in an encrypted `draft_info.json`; this tool neither writes nor decrypts that file**, so do not treat this output as a 10.1-importable project. This build did not perform a live import inside a running Jianying install; the compatibility note is in [docs/demo-results.json](docs/demo-results.json). Cut alignment is computed exact from `tc_in`/`tc_out` to microseconds rather than estimated.
+**Target version:** plaintext `draft_content.json`, `version: 360000` and `new_version: "75.0.0"`, the format read by Jianying Professional 5.x/6.x. **Jianying 10.1 stores its timeline in an encrypted `draft_info.json`; this tool neither writes nor decrypts that file**, so do not treat this output as a 10.1-importable project. Jianying Professional 10.1.0 is installed on the recording machine (`/Applications/VideoFusion-macOS.app`), but it only reads and writes encrypted projects, so the plaintext 5.x/6.x project was never imported into a running editor: the m3 live-import acceptance and the <200 ms per-cut error acceptance are both **UNVERIFIED**. Cut timecodes are converted from `tc_in`/`tc_out` to microseconds rather than estimated; the compatibility record is in [docs/demo-results.json](docs/demo-results.json).
 
 ## Pricing
 
@@ -205,6 +204,7 @@ The team edition runs on a 2C4G Tencent Cloud Lighthouse instance and bills thro
 - It cannot locate captions already burned into the source; the safe-area rule checks the planned band only.
 - The Jianying export targets plaintext `draft_content.json` versions; 10.1's encrypted `draft_info.json` is out of scope.
 - The hook window and safe areas in the platform rules are community heuristics and need a YAML edit when a platform changes. `duration_s` comes from public policy pages, but the publishing page remains authoritative at upload time.
+- On macOS, loading `scenedetect`/PyAV alongside the system `libavdevice` can print duplicate Objective-C class warnings to stderr (`objc[...]: Class ... is implemented in both ...`). They are library-loading notices and do not affect cut detection or export output.
 
 ## Development
 

@@ -72,6 +72,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The planned caption band is an error even when a sheet has no captions yet, so
+  `shotsheet rules shots.json --caption-box 88,100,4,96` now exits 1 on a sheet
+  freshly produced by the quickstart, matching the documented example.
+- The local page can open an existing `shots.json`; inline edits then persist to
+  that file. Results analysed in the page stay in a scratch file, so a new run
+  never overwrites a sheet the user opened. The page shows the active path.
+- Default Jianying draft names and draft ids include platform and aspect (for
+  example `demo-douyin-9x16` vs `demo-xiaohongshu-3x4`), so the same clip
+  exported for two platforms no longer collides; the different-draft-id refusal
+  still applies.
+- The A4 sheet fits 12 shots on one page at the tightened print sizes.
+- Removed the unimplemented `template` field from the `ShotSheet` contract, and
+  the README no longer advertises a template feature beyond the v0.2 roadmap.
+- Removed the `ffprobe` claim: `pipeline/analyze.py` reads duration and frame rate
+  through `scenedetect`; `ffmpeg` is used only to sample frames for vision.
+- Corrected the recording environment: 剪映专业版 10.1.0 is installed, but it
+  stores an encrypted `draft_info.json`. The plaintext 5.x/6.x export was never
+  live-imported, so the m3 import and <200 ms cut-error acceptance are marked
+  UNVERIFIED.
+- Qualified the local-processing claim: three JPEG frames per shot go to the
+  chosen vision endpoint only when vision is enabled; no-vision mode is fully
+  local.
 - The default planned caption box is now `top 72 / bottom 80 / left 6 / right 88`
   percent, which stays inside the UI margins of all three shipped platform
   profiles. The previous default sat inside the bottom UI band and outside the

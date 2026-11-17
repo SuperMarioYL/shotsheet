@@ -1,12 +1,12 @@
 {
   "version": "0.1.0",
   "recorded_at": "2026-11-18",
-  "note": "Scratch paths under .builder_demo/ were temporary and were removed after recording; substitute your own output directory when rerunning the commands.",
+  "note": "The demo-run/ paths were scratch paths and were removed after recording; substitute your own output directory when rerunning the commands.",
   "environment": {
     "os": "macOS 27.2 arm64",
     "python": "3.13 (uv-managed venv; package requires >=3.11)",
     "ffmpeg": "9.0.2",
-    "jianying": "not installed on the recording machine; no live 剪映 import was performed"
+    "jianying": "剪映专业版 10.1.0 installed at /Applications/VideoFusion-macOS.app (bundle com.lemon.lvpro). 10.1 keeps the timeline in an encrypted draft_info.json, so the exported plaintext 5.x/6.x schema was never live-imported into that install."
   },
   "input": {
     "kind": "synthetic",
@@ -21,20 +21,20 @@
       "ffmpeg -loop 1 -t 5 -i frames/sceneNN.png -vf fps=30,format=yuv420p -c:v libx264 -preset veryfast -crf 20 parts/partNN.mp4",
       "ffmpeg -f concat -safe 0 -i parts.txt -c copy demo.mp4"
     ],
-    "note": "The shell loop that ran these commands is build scratch and is not shipped. Alternating luminance guarantees every hard cut is a large content change, so the 12 manual cuts are also the expected detector output."
+    "note": "The shell loop that ran these commands is not shipped. Alternating luminance guarantees every hard cut is a large content change, so the 12 manual cuts are also the expected detector output."
   },
   "commands": [
     {
-      "command": "uv run shotsheet analyze .builder_demo/demo.mp4 --platform douyin -o .builder_demo/shots.json --html .builder_demo/shots.html",
-      "observed": "12 shots -> shots.json (sheet: shots.html); rules: 1 finding(s), 0 error(s)"
+      "command": "uv run shotsheet analyze demo-run/demo.mp4 --platform douyin -o demo-run/shots.json --html demo-run/shots.html",
+      "observed": "12 shots -> demo-run/shots.json (sheet: demo-run/shots.html); rules: 1 finding(s), 0 error(s)"
     },
     {
-      "command": "uv run shotsheet export .builder_demo/shots.json --jianying-dir .builder_demo/jianying --draft-name demo-teardown --dry-run",
+      "command": "uv run shotsheet export demo-run/shots.json --jianying-dir demo-run/jianying --draft-name demo-teardown --dry-run",
       "observed": "canvas 1080x1920 (9:16), 00:01:00.000 total; video track: 12 segment(s); text track: 0 segment(s)"
     },
     {
-      "command": "uv run shotsheet export .builder_demo/shots.json --jianying-dir .builder_demo/jianying --video .builder_demo/demo.mp4 --draft-name demo-teardown",
-      "observed": "12 video + 0 text segment(s) -> jianying/demo-teardown"
+      "command": "uv run shotsheet export demo-run/shots.json --jianying-dir demo-run/jianying --video demo-run/demo.mp4 --draft-name demo-teardown",
+      "observed": "12 video + 0 text segment(s) -> demo-run/jianying/demo-teardown (draft root: demo-run/jianying); plaintext draft_content.json for 剪映专业版 5.x/6.x; 10.1 uses encrypted draft_info.json"
     }
   ],
   "outputs": {
@@ -66,8 +66,8 @@
       "json_bytes": 3695
     },
     "jianying": {
-      "draft_root": ".builder_demo/jianying/",
-      "project_dir": ".builder_demo/jianying/demo-teardown/",
+      "draft_root": "demo-run/jianying/",
+      "project_dir": "demo-run/jianying/demo-teardown/",
       "files": [
         "root_meta_info.json",
         "demo-teardown/draft_content.json",
@@ -125,27 +125,38 @@
     }
   },
   "verification": {
-    "test_suite": "74 tests",
+    "test_suite": "82 tests",
     "lint": "ruff check . and ruff format --check . pass",
     "jianying_tests": [
       "segment count equals shot count",
       "target/source ranges are microseconds",
       "caption track and text material counts",
       "canvas follows the platform aspect ratio",
+      "default draft names and ids include platform and aspect, so Douyin and Xiaohongshu exports do not collide",
       "29.97 fps tc_out converts through the real frame rate",
       "rerunning the same export produces byte-identical JSON",
       "no text track when no captions exist",
       "CLI dry-run writes nothing; CLI export writes the root layout",
       "an existing root_meta_info.json is merged by draft id; a different draft folder is not overwritten"
+    ],
+    "web_tests": [
+      "opening an existing shots.json points PUT /sheet at that file and edits land on disk",
+      "a missing path, malformed JSON, or not-a-sheet JSON is rejected with a clear message",
+      "the A4 sheet prints 12 shots on one page in headless Chrome"
     ]
   },
   "limitations": [
     "剪映专业版 10.1 stores drafts in an encrypted draft_info.json. This exporter writes the plaintext draft_content.json format (version 360000, new_version 75.0.0) used by 剪映专业版 5.x/6.x and does not write or decrypt draft_info.json.",
-    "No running 剪映 installation was available in the recording environment, so the import was not observed. Cut alignment is exact by construction (tc_in/tc_out -> microseconds), but the target editor version and real import behavior remain unverified.",
+    "剪映专业版 10.1.0 is installed, but it stores the timeline in an encrypted draft_info.json and reads no plaintext draft_content.json. The exported 5.x/6.x schema was therefore never live-imported, and the m3 acceptance (live import, per-cut error <200 ms) remains UNVERIFIED.",
     "The draft's material path is the absolute --video path when supplied. Moving the draft folder requires relinking the clip, which is normal for 剪映 drafts.",
     "The synthetic clip has no audio, so ASR was not run and this recording has no caption text track. Caption segment export is covered by unit tests with hand-authored captions.",
     "Vision fields are empty because no ARK_API_KEY/DASHSCOPE_API_KEY was used. The describe pipeline is covered by offline tests with a mocked provider.",
     "The input clip is synthetic; scene detection found exactly 12 cuts because the cuts are high-contrast hard cuts. Real footage may produce a different count, and the tool warns when a clip yields a single shot.",
-    "The GIF is a montage of real artifacts, not a screen recording of the web UI."
+    "The GIF is a montage of real artifacts, not a screen recording of the web UI.",
+    "On macOS, loading scenedetect/PyAV alongside the system libavdevice can print duplicate Objective-C class warnings (objc[...]: Class ... is implemented in both ...). They are harmless library-loading notices, not analysis failures."
+  ],
+  "unverified": [
+    "m3 acceptance: live import of the exported draft into a running 剪映专业版 was not performed; UNVERIFIED.",
+    "m3 acceptance: per-cut error <200 ms against the editor timeline was not measured; UNVERIFIED."
   ]
 }

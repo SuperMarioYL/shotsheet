@@ -320,6 +320,9 @@ def apply_platform_rules(sheet: ShotSheet, *, rulebook: RuleBook | None = None) 
             "left {box.left:g}% / right {box.right:g}%，来自 source.caption_box）"
             "越过{label}安全区：{problems}"
         ).format(box=box, label=profile.label, problems="；".join(box_problems))
+        # The planned band is an explicit configuration, so an out-of-bounds
+        # band is an error even when the sheet has no captions yet: exporting or
+        # captioning later would place text outside the platform UI margins.
         if caption_shots:
             for shot in caption_shots:
                 violations.append(
@@ -337,7 +340,7 @@ def apply_platform_rules(sheet: ShotSheet, *, rulebook: RuleBook | None = None) 
                     rule_id=f"{platform.value}.planned_caption_safe_area",
                     platform=platform,
                     shot_index=None,
-                    severity="warning",
+                    severity="error",
                     message=message,
                 )
             )

@@ -198,7 +198,6 @@ class ShotSheet(BaseModel):
     rules: str | None = Field(
         default=None, description="Rule set applied, e.g. cn-platforms.yaml#douyin."
     )
-    template: str | None = Field(default=None, description="Saved sheet id this sheet extends.")
     shots: list[Shot] = Field(min_length=1)
 
     @field_validator("shots")

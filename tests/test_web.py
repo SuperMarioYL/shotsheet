@@ -14,6 +14,14 @@ from shotsheet.web.app import SHEET_STORE, app
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def _scratch_sheet_store() -> None:
+    """Keep each test on the scratch file instead of a path another test opened."""
+    SHEET_STORE.reset()
+    yield
+    SHEET_STORE.reset()
+
+
 def _sheet() -> ShotSheet:
     return ShotSheet(
         source=Source(file="demo.mp4", duration_ms=5000, fps=30.0, platform=Platform.DOUYIN),
@@ -33,6 +41,8 @@ def test_index_is_the_chinese_single_page() -> None:
     assert "cdn" not in response.text.lower()
     assert 'id="apiKey"' in response.text
     assert 'id="provider"' in response.text
+    assert 'id="sheetPath"' in response.text
+    assert 'id="openSheet"' in response.text
     assert "contenteditable" in response.text
 
 
@@ -135,3 +145,46 @@ def test_put_sheet_rejects_an_invalid_enum_without_overwriting() -> None:
     assert response.status_code == 422
     on_disk = json.loads(SHEET_STORE.path.read_text(encoding="utf-8"))
     assert on_disk["shots"][0]["shot_size"] is None
+
+
+def test_open_sheet_points_edits_at_the_users_file(tmp_path) -> None:
+    path = tmp_path / "shots.json"
+    path.write_text(_sheet().model_dump_json(indent=2), encoding="utf-8")
+
+    opened = client.post("/sheet/open", json={"path": str(path)})
+
+    assert opened.status_code == 200, opened.text
+    assert opened.json()["sheet_path"] == str(path.resolve())
+    payload = opened.json()["sheet"]
+    payload["shots"][0]["shot_size"] = "近景"
+
+    saved = client.put("/sheet", json=payload)
+
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["sheet_path"] == str(path.resolve())
+    on_disk = json.loads(path.read_text(encoding="utf-8"))
+    assert on_disk["shots"][0]["shot_size"] == "近景"
+
+
+def test_open_sheet_reports_a_missing_file(tmp_path) -> None:
+    response = client.post("/sheet/open", json={"path": str(tmp_path / "missing.json")})
+
+    assert response.status_code == 404
+    assert "找不到" in response.json()["detail"]
+
+
+def test_open_sheet_rejects_json_that_is_not_a_sheet(tmp_path) -> None:
+    path = tmp_path / "other.json"
+    path.write_text('{"hello": "world"}', encoding="utf-8")
+
+    response = client.post("/sheet/open", json={"path": str(path)})
+
+    assert response.status_code == 400
+    assert "分镜表" in response.json()["detail"]
+
+
+def test_open_sheet_needs_a_path() -> None:
+    response = client.post("/sheet/open", json={"path": "  "})
+
+    assert response.status_code == 400
+    assert "路径" in response.json()["detail"]

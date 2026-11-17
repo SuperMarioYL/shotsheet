@@ -132,6 +132,35 @@ def test_canvas_follows_the_platform_aspect_ratio(tmp_path: Path) -> None:
     }
 
 
+def test_default_draft_name_includes_platform_and_aspect(tmp_path: Path) -> None:
+    douyin = export_jianying_draft(_sheet(platform=Platform.DOUYIN), tmp_path / "douyin")
+    xhs = export_jianying_draft(_sheet(platform=Platform.XIAOHONGSHU), tmp_path / "xhs")
+
+    assert douyin.project_dir.name == "demo-douyin-9x16"
+    assert xhs.project_dir.name == "demo-xiaohongshu-3x4"
+
+
+def test_same_draft_name_and_file_still_differ_by_platform(tmp_path: Path) -> None:
+    douyin = export_jianying_draft(
+        _sheet(platform=Platform.DOUYIN), tmp_path / "d", draft_name="same"
+    )
+    xhs = export_jianying_draft(
+        _sheet(platform=Platform.XIAOHONGSHU), tmp_path / "x", draft_name="same"
+    )
+
+    assert _load(douyin.content_path)["id"] != _load(xhs.content_path)["id"]
+
+
+def test_the_overwrite_guard_separates_platforms_in_one_draft_root(tmp_path: Path) -> None:
+    export_jianying_draft(_sheet(platform=Platform.DOUYIN), tmp_path, draft_name="shared")
+    before = _load(tmp_path / "shared" / "draft_content.json")
+
+    with pytest.raises(ValueError, match="different draft"):
+        export_jianying_draft(_sheet(platform=Platform.XIAOHONGSHU), tmp_path, draft_name="shared")
+
+    assert _load(tmp_path / "shared" / "draft_content.json") == before
+
+
 def test_microseconds_follow_the_real_frame_rate(tmp_path: Path) -> None:
     sheet = ShotSheet(
         source=Source(
