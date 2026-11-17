@@ -41,7 +41,7 @@ from shotsheet.pipeline.describe import (
 )
 from shotsheet.pipeline.rules import RuleReport, RulesError, apply_platform_rules
 from shotsheet.render.shotlist_html import render_shot_table
-from shotsheet.schema import Platform, ShotSheet
+from shotsheet.schema import CaptionBox, Platform, ShotSheet
 
 WEB_DIR = Path(__file__).resolve().parent
 
@@ -108,12 +108,17 @@ async def analyze_clip(
     transcribe: Annotated[bool, Form(description="是否本地转写字幕")] = False,
     provider: Annotated[str, Form(description="视觉 provider")] = DEFAULT_PROVIDER,
     api_key: Annotated[str | None, Form(description="页面粘贴的 Key，仅本次请求使用")] = None,
+    caption_box: Annotated[
+        str | None,
+        Form(description="计划字幕区 top,bottom,left,right 百分比；留空用默认值"),
+    ] = None,
     stream: Annotated[bool, Form(description="返回逐镜进度事件流")] = False,
 ) -> Response:
     """Analyse one clip and return the sheet, findings, warnings, and table HTML."""
     if file is None and not path:
         raise HTTPException(status_code=400, detail="请上传视频文件或提供本机路径。")
 
+    box = _caption_box(caption_box)
     try:
         provider_config = get_provider(provider)
         pasted_key = (api_key or "").strip() or None
@@ -154,6 +159,7 @@ async def analyze_clip(
                 transcribe=transcribe,
                 provider=provider,
                 api_key=key,
+                caption_box=box,
                 warnings=initial_warnings,
                 cleanup=temp_dir,
             ),
@@ -168,6 +174,7 @@ async def analyze_clip(
             transcribe=transcribe,
             provider=provider,
             api_key=key,
+            caption_box=box,
             warnings=initial_warnings,
         )
     finally:
@@ -205,6 +212,7 @@ def _analyse(
     transcribe: bool,
     provider: str,
     api_key: str | None,
+    caption_box: CaptionBox | None,
     warnings: list[str],
     on_stage: Callable[[str], None] | None = None,
     on_progress: Callable[[int, int], None] | None = None,
@@ -230,6 +238,8 @@ def _analyse(
                 )
         if on_stage is not None:
             on_stage("按平台规则校验…")
+        if caption_box is not None:
+            sheet = sheet.with_caption_box(caption_box)
         report = apply_platform_rules(sheet)
     except (AnalyzeError, RulesError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -250,6 +260,16 @@ def _payload(report: RuleReport, warnings: list[str]) -> dict[str, object]:
     }
 
 
+def _caption_box(value: str | None) -> CaptionBox | None:
+    """Parse an optional ``top,bottom,left,right`` form value into a caption box."""
+    if value is None or not value.strip():
+        return None
+    try:
+        return CaptionBox.from_csv(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 def _stream_analysis(
     video: Path,
     *,
@@ -258,6 +278,7 @@ def _stream_analysis(
     transcribe: bool,
     provider: str,
     api_key: str | None,
+    caption_box: CaptionBox | None,
     warnings: list[str],
     cleanup: tempfile.TemporaryDirectory[str] | None,
 ) -> Iterator[str]:
@@ -282,6 +303,7 @@ def _stream_analysis(
                 transcribe=transcribe,
                 provider=provider,
                 api_key=api_key,
+                caption_box=caption_box,
                 warnings=list(warnings),
                 on_stage=stage,
                 on_progress=progress,

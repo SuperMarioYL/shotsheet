@@ -153,19 +153,18 @@ def test_inside_caption_box_sets_verdicts_and_rule_id() -> None:
 
 
 @pytest.mark.parametrize("platform", list(Platform))
-def test_default_caption_box_fires_for_every_shipped_platform(platform: Platform) -> None:
-    """The conservative default is deliberately outside the shipped UI margins."""
+def test_default_caption_box_passes_for_every_shipped_platform(platform: Platform) -> None:
+    """The default band must be usable, not a violation on every shipped profile."""
     report = apply_platform_rules(_sheet(platform, captions=(True, False)))
 
     findings = [
         v for v in report.violations if v.rule_id == f"{platform.value}.planned_caption_safe_area"
     ]
-    assert len(findings) == 1
-    assert findings[0].severity == "error"
-    assert findings[0].shot_index == 0
-    assert "计划字幕区" in findings[0].message
-    assert "source.caption_box" in findings[0].message
-    assert report.sheet.shots[0].caption.safe_area_ok is False
+    assert findings == []
+    assert report.sheet.shots[0].caption.safe_area_ok is True
+    assert report.sheet.source.caption_box == CaptionBox()
+    assert (CaptionBox().top, CaptionBox().bottom) == (72.0, 80.0)
+    assert (CaptionBox().left, CaptionBox().right) == (6.0, 88.0)
 
 
 def test_out_of_margin_caption_box_reports_every_caption_shot() -> None:
@@ -180,7 +179,8 @@ def test_out_of_margin_caption_box_reports_every_caption_shot() -> None:
 
 
 def test_out_of_margin_caption_box_without_captions_is_sheet_warning() -> None:
-    report = apply_platform_rules(_sheet())
+    outside = CaptionBox(top=88, bottom=100, left=4, right=96)
+    report = apply_platform_rules(_sheet(caption_box=outside))
 
     findings = [v for v in report.violations if v.rule_id == "douyin.planned_caption_safe_area"]
     assert len(findings) == 1

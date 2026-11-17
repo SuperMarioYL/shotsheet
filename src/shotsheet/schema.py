@@ -95,15 +95,17 @@ class CaptionBox(BaseModel):
 
     This is the rectangle the exporter would use, not a box read from the source
     video: v0.1 cannot locate text already burned into the picture. The default
-    is a conservative product choice, not a platform specification -- the bottom
-    12% of the frame with 4% side margins, which keeps the platform UI clear on
-    9:16 and 3:4 clips.
+    is a conservative product choice, not a platform specification -- an 8%-tall
+    band from 72% to 80% of frame height, with 6% left and 12% right margins.
+    That rectangle stays inside the UI margins of all three shipped profiles
+    (top 8-10%, bottom 20%, left 5%, right 10-12%), so it is a usable starting
+    point rather than a guaranteed universal band.
     """
 
-    top: float = Field(default=88.0, ge=0, le=100)
-    bottom: float = Field(default=100.0, ge=0, le=100)
-    left: float = Field(default=4.0, ge=0, le=100)
-    right: float = Field(default=96.0, ge=0, le=100)
+    top: float = Field(default=72.0, ge=0, le=100)
+    bottom: float = Field(default=80.0, ge=0, le=100)
+    left: float = Field(default=6.0, ge=0, le=100)
+    right: float = Field(default=88.0, ge=0, le=100)
 
     @model_validator(mode="after")
     def _check_rect(self) -> CaptionBox:
@@ -112,6 +114,22 @@ class CaptionBox(BaseModel):
         if self.left >= self.right:
             raise ValueError("caption box must satisfy left < right")
         return self
+
+    @classmethod
+    def from_csv(cls, value: str) -> CaptionBox:
+        """Parse ``top,bottom,left,right`` percentages into a caption box."""
+        parts = [part.strip() for part in value.split(",")]
+        if len(parts) != 4:
+            raise ValueError("expected four comma-separated percentages: top,bottom,left,right")
+        try:
+            top, bottom, left, right = (float(part) for part in parts)
+        except ValueError as exc:
+            raise ValueError(f"caption box values must be numbers: {value!r}") from exc
+        if not all(0 <= number <= 100 for number in (top, bottom, left, right)):
+            raise ValueError("caption box percentages must stay within 0..100")
+        if top >= bottom or left >= right:
+            raise ValueError("caption box must satisfy top < bottom and left < right")
+        return cls(top=top, bottom=bottom, left=left, right=right)
 
 
 class Source(BaseModel):
@@ -189,3 +207,9 @@ class ShotSheet(BaseModel):
         if any(shot.index != position for position, shot in enumerate(shots)):
             raise ValueError("shots must be indexed from 0 in order")
         return shots
+
+    def with_caption_box(self, box: CaptionBox) -> ShotSheet:
+        """Return a copy of this sheet with a different planned caption band."""
+        return self.model_copy(
+            update={"source": self.source.model_copy(update={"caption_box": box})}
+        )

@@ -64,6 +64,8 @@
     color: var(--text);
     padding: 9px 12px;
   }
+  .boxfields { display: flex; gap: 6px; }
+  .boxfields input { width: 64px; padding: 9px 6px; text-align: center; }
   select, button {
     font: inherit;
     border-radius: 8px;
@@ -185,6 +187,15 @@
         <option value="xiaohongshu">小红书</option>
         <option value="shipinhao">视频号</option>
       </select>
+    </div>
+    <div class="field">
+      <label for="cbTop" title="计划字幕区，按画面百分比填写；默认 72/80/6/88 在三套平台规则内">计划字幕区（% 上/下/左/右）</label>
+      <div class="boxfields">
+        <input id="cbTop" type="number" min="0" max="100" step="1" value="72" aria-label="字幕区上边">
+        <input id="cbBottom" type="number" min="0" max="100" step="1" value="80" aria-label="字幕区下边">
+        <input id="cbLeft" type="number" min="0" max="100" step="1" value="6" aria-label="字幕区左边">
+        <input id="cbRight" type="number" min="0" max="100" step="1" value="88" aria-label="字幕区右边">
+      </div>
     </div>
     <div class="field">
       <label for="provider">视觉模型</label>
@@ -518,6 +529,10 @@
     form.append("provider", provider);
     form.append("vision", vision ? "true" : "false");
     form.append("transcribe", $("transcribe").checked ? "true" : "false");
+    form.append(
+      "caption_box",
+      ["cbTop", "cbBottom", "cbLeft", "cbRight"].map((id) => $(id).value.trim()).join(",")
+    );
     form.append("stream", "true");
     if (key) form.append("api_key", key);
 

@@ -18,6 +18,11 @@ from shotsheet.pipeline.describe import (
     vision_coverage,
 )
 from shotsheet.pipeline.rules import RulesError, Violation, apply_platform_rules
+from shotsheet.render.jianying import (
+    describe_draft_plan,
+    export_jianying_draft,
+    plan_jianying_draft,
+)
 from shotsheet.render.shotlist_html import render_shotlist_html
 from shotsheet.schema import CaptionBox, Platform, ShotSheet
 
@@ -81,7 +86,7 @@ def analyze(
         str | None,
         typer.Option(
             "--caption-box",
-            help="Planned caption box as top,bottom,left,right percentages (default 88,100,4,96).",
+            help="Planned caption box as top,bottom,left,right percentages (default 72,80,6,88).",
         ),
     ] = None,
 ) -> None:
@@ -96,7 +101,7 @@ def analyze(
             language=language,
         )
         if box is not None:
-            sheet = _with_caption_box(sheet, box)
+            sheet = sheet.with_caption_box(box)
         report = apply_platform_rules(sheet)
     except (AnalyzeError, RulesError) as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
@@ -167,7 +172,7 @@ def describe(
         str | None,
         typer.Option(
             "--caption-box",
-            help="Planned caption box as top,bottom,left,right percentages (default 88,100,4,96).",
+            help="Planned caption box as top,bottom,left,right percentages (default 72,80,6,88).",
         ),
     ] = None,
 ) -> None:
@@ -211,7 +216,7 @@ def describe(
             sheet = analyze_video(media or source, platform=platform)
 
         if box is not None:
-            sheet = _with_caption_box(sheet, box)
+            sheet = sheet.with_caption_box(box)
         report = apply_platform_rules(sheet)
     except (AnalyzeError, RulesError) as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
@@ -274,7 +279,7 @@ def rules(
         str | None,
         typer.Option(
             "--caption-box",
-            help="Planned caption box as top,bottom,left,right percentages (default 88,100,4,96).",
+            help="Planned caption box as top,bottom,left,right percentages (default 72,80,6,88).",
         ),
     ] = None,
 ) -> None:
@@ -287,7 +292,7 @@ def rules(
                 update={"source": sheet.source.model_copy(update={"platform": platform})}
             )
         if box is not None:
-            sheet = _with_caption_box(sheet, box)
+            sheet = sheet.with_caption_box(box)
         report = apply_platform_rules(sheet)
     except (ValueError, RulesError) as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
@@ -306,6 +311,76 @@ def rules(
 
     if report.errors:
         raise typer.Exit(code=1)
+
+
+@app.command()
+def export(
+    sheet_file: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            dir_okay=False,
+            readable=True,
+            resolve_path=True,
+            help="shots.json to export.",
+        ),
+    ],
+    jianying_dir: Annotated[
+        Path,
+        typer.Option(
+            "--jianying-dir",
+            help=(
+                "Draft root to write: root_meta_info.json plus <draft-name>/"
+                "draft_content.json and draft_meta_info.json."
+            ),
+        ),
+    ],
+    draft_name: Annotated[
+        str | None,
+        typer.Option(
+            "--draft-name", help="Project folder name; defaults to <source stem>-shotsheet."
+        ),
+    ] = None,
+    video: Annotated[
+        Path | None,
+        typer.Option(
+            "--video",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+            resolve_path=True,
+            help="Source clip to embed as the draft's material path.",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Print the planned track/segment tree; write nothing."),
+    ] = False,
+) -> None:
+    """Export a shot sheet as a 剪映专业版 draft project folder.
+
+    The output is the plaintext draft format (draft_content.json version 360000,
+    new_version 75.0.0) read by 剪映专业版 5.x/6.x. 剪映 10.1 keeps the timeline in
+    an encrypted draft_info.json instead, which this exporter does not write.
+    """
+    try:
+        sheet = _read_sheet(sheet_file)
+        if dry_run:
+            plan = plan_jianying_draft(sheet, draft_name=draft_name)
+            typer.echo(describe_draft_plan(plan, jianying_dir))
+            return
+        result = export_jianying_draft(sheet, jianying_dir, draft_name=draft_name, video_path=video)
+    except (AnalyzeError, ValueError, OSError) as exc:
+        typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(
+        f"{result.video_segments} video + {result.text_segments} text segment(s) -> "
+        f"{result.project_dir} (draft root: {result.root})"
+    )
+    typer.echo(
+        "plaintext draft_content.json for 剪映专业版 5.x/6.x; 10.1 uses encrypted draft_info.json"
+    )
 
 
 @app.command()
@@ -333,24 +408,10 @@ def _caption_box(value: str | None) -> CaptionBox | None:
     """Parse ``top,bottom,left,right`` percentages into a planned caption box."""
     if value is None:
         return None
-    parts = [part.strip() for part in value.split(",")]
-    if len(parts) != 4:
-        raise typer.BadParameter(
-            "--caption-box needs four comma-separated percentages: top,bottom,left,right"
-        )
     try:
-        top, bottom, left, right = (float(part) for part in parts)
+        return CaptionBox.from_csv(value)
     except ValueError as exc:
-        raise typer.BadParameter(f"--caption-box values must be numbers: {value!r}") from exc
-    if not all(0 <= number <= 100 for number in (top, bottom, left, right)):
-        raise typer.BadParameter("--caption-box percentages must stay within 0..100")
-    if top >= bottom or left >= right:
-        raise typer.BadParameter("--caption-box must satisfy top < bottom and left < right")
-    return CaptionBox(top=top, bottom=bottom, left=left, right=right)
-
-
-def _with_caption_box(sheet: ShotSheet, box: CaptionBox) -> ShotSheet:
-    return sheet.model_copy(update={"source": sheet.source.model_copy(update={"caption_box": box})})
+        raise typer.BadParameter(f"--caption-box {exc}") from exc
 
 
 def _write_sheet(

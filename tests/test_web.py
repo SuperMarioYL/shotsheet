@@ -36,6 +36,32 @@ def test_index_is_the_chinese_single_page() -> None:
     assert "contenteditable" in response.text
 
 
+def test_index_exposes_the_caption_box_control() -> None:
+    response = client.get("/")
+
+    assert 'id="cbTop" type="number"' in response.text
+    assert 'id="cbBottom" type="number"' in response.text
+    assert 'id="cbLeft" type="number"' in response.text
+    assert 'id="cbRight" type="number"' in response.text
+    assert 'value="72"' in response.text
+    assert 'value="80"' in response.text
+    assert 'value="6"' in response.text
+    assert 'value="88"' in response.text
+
+
+def test_analyze_rejects_a_bad_caption_box_before_the_video(tmp_path) -> None:
+    video = tmp_path / "demo.mp4"
+    video.write_bytes(b"not a real video")
+
+    response = client.post(
+        "/analyze",
+        data={"vision": "false", "path": str(video), "caption_box": "72,60,6,88"},
+    )
+
+    assert response.status_code == 400
+    assert "top < bottom" in response.json()["detail"]
+
+
 def test_editable_table_exposes_inline_cells() -> None:
     html = render_shot_table(_sheet(), editable=True)
 
