@@ -1,0 +1,385 @@
+{
+  "schema": 3,
+  "name": "shotsheet",
+  "github": "https://github.com/SuperMarioYL/shotsheet",
+  "host": "shotsheet.lei6393.com",
+  "lang": {
+    "primary": "zh",
+    "toggle": true
+  },
+  "palette": "auto",
+  "hero": {
+    "eyebrow": {
+      "zh": "本地短视频拉片 · 抖音 / 小红书 / 视频号规则 · 剪映明文 draft",
+      "en": "Local short-video teardown · Douyin / Xiaohongshu / Channels rules · plaintext Jianying draft"
+    },
+    "headline": {
+      "zh": "把一条对标片\n拆成能照着拍的分镜表。",
+      "en": "Turn a reference clip\ninto a shot list you can shoot."
+    },
+    "sub": {
+      "zh": "拉片单（ShotSheet）读一条本地竖屏视频，切出镜头并给每一镜原片时间码、时长、景别、机位、运镜、道具和场景；按抖音、小红书、视频号的规则检查开场钩子与计划字幕区，再导出剪映专业版 5.x/6.x 的明文 draft。切镜、规则校验和导出都在本机，不需要账号；视觉描述可选，只有开启时每镜才会向所选接口发送 3 张抽帧。",
+      "en": "ShotSheet reads a local vertical clip, splits it into shots and gives each one its source timecode, duration, shot size, camera, movement, props and scene. It checks the opening hook and planned caption band against Douyin, Xiaohongshu and WeChat Channels rules, then exports a plaintext Jianying Professional 5.x/6.x draft. Cut detection, rule checks and export run locally with no account; vision is optional and, when enabled, sends three sampled frames per shot to the chosen endpoint."
+    },
+    "href": "#quickstart",
+    "command": "uv run shotsheet analyze demo.mp4 --platform douyin -o shots.json",
+    "cta": {
+      "zh": "查看快速开始",
+      "en": "Run the quickstart"
+    },
+    "ctaGithub": {
+      "zh": "在 GitHub 查看",
+      "en": "View on GitHub"
+    }
+  },
+  "advantages": [
+    {
+      "title": {
+        "zh": "每一镜都能回到原片那一帧",
+        "en": "Every row returns to the source frame"
+      },
+      "body": {
+        "zh": "scenedetect 找镜头边界，时长与帧率从视频流读取，tc_in 按真实帧率换算；shots.json 可以 diff，shots.html 是 A4 打印版式。第 1 镜跑过抖音 3 秒钩子窗口时，表里留下一条 warning，而不是被丢掉。",
+        "en": "scenedetect finds the cuts; duration and frame rate come from the video stream; tc_in is converted at the real frame rate. shots.json diffs cleanly and shots.html is an A4 print layout. When shot 1 runs past Douyin's 3-second hook window, the sheet keeps that warning instead of dropping it."
+      },
+      "chips": [
+        "› tc_in · shots.json · shots.html",
+        "› scenedetect · real fps"
+      ]
+    },
+    {
+      "title": {
+        "zh": "平台规则只读一份 YAML",
+        "en": "Platform rules live in one YAML"
+      },
+      "body": {
+        "zh": "src/shotsheet/rules/cn-platforms.yaml 是唯一来源：时长上下限引用平台公开规则页，开场钩子与字幕安全区在文件里标为 heuristic。计划字幕区越出平台安全区时按 error 处理，rules 命令以退出码 1 结束；CLI 和网页改的是同一个输入。",
+        "en": "src/shotsheet/rules/cn-platforms.yaml is the only source: duration limits cite public platform policy pages, while the opening hook and subtitle safe areas are marked heuristic in the file. A planned caption band outside the platform safe area is an error, so the rules command exits 1; the CLI and the page change the same input."
+      },
+      "chips": [
+        "› one YAML source",
+        "› planned_caption_safe_area"
+      ]
+    },
+    {
+      "title": {
+        "zh": "从分析到剪映 draft，逐段可对账",
+        "en": "From analysis to a Jianying draft, segment by segment"
+      },
+      "body": {
+        "zh": "export 先把画布、轨道和段数打印出来（--dry-run 不写文件），再写出 root_meta_info.json 与 draft 目录：每镜一个视频段，target_timerange 与 source_timerange 都是微秒。draft 名与 id 带平台和画幅，同一条源片导出抖音和小红书不会互相覆盖。",
+        "en": "export first prints the canvas, tracks and segment count (--dry-run writes nothing), then writes root_meta_info.json and the draft folder: one video segment per shot, with target_timerange and source_timerange in microseconds. Draft names and ids include platform and aspect, so a Douyin export and a Xiaohongshu export of the same clip do not overwrite each other."
+      },
+      "chips": [
+        "› version 360000 · 75.0.0",
+        "› 12 segments · 60,000,000 µs"
+      ]
+    },
+    {
+      "title": {
+        "zh": "本地单进程，视觉可选",
+        "en": "One local process, vision optional"
+      },
+      "body": {
+        "zh": "FastAPI 单页和 CLI 共用同一份 shots.json：打开已有文件后，页面里的改动写回该文件并重跑规则。勾选视觉描述时，每镜向火山方舟或阿里云百炼发送 3 张抽帧 JPEG；不勾选则完全本机处理。没有数据库，所有结果都落在文件里。",
+        "en": "The FastAPI page and the CLI share one shots.json: open an existing file, edit a cell, and the change is written back and the rules re-run. With vision enabled, each shot sends three sampled JPEG frames to Volcengine Ark or Alibaba Cloud DashScope; with vision off everything stays on the machine. There is no database; every result lands in a file."
+      },
+      "chips": [
+        "› local-first",
+        "› ARK / DashScope"
+      ]
+    }
+  ],
+  "demo": {
+    "title": {
+      "zh": "录制运行",
+      "en": "Recorded run"
+    },
+    "note": {
+      "zh": "下面的命令与输出逐字取自 docs/demo-results.json，记录于 2026-11-18：macOS 27.2 arm64，uv 管理的 Python 3.13 虚拟环境，ffmpeg 9.0.2。输入是一条 60 秒、12 个硬切的合成竖屏片源（540×960、30 fps、无音轨），不是任何真实账号的数据；12 个切点是人为的高对比硬切，真实素材的数量可能不同。这一轮没有使用视觉 Key，所以景别、机位等字段为空。",
+      "en": "The commands and outputs below are copied verbatim from docs/demo-results.json, recorded 2026-11-18 on macOS 27.2 arm64 with a uv-managed Python 3.13 environment and ffmpeg 9.0.2. The input is a synthetic 60-second vertical clip with 12 hard cuts (540×960, 30 fps, no audio track), not data from any real account; the 12 cuts are deliberately high-contrast, so real footage may yield a different count. No vision key was used in this run, so shot size, camera and prop fields are empty."
+    },
+    "source": "https://github.com/SuperMarioYL/shotsheet/blob/main/docs/demo-results.json",
+    "steps": [
+      {
+        "label": {
+          "zh": "切镜、时间码、规则",
+          "en": "Cuts, timecodes, rules"
+        },
+        "body": {
+          "zh": "analyze 得到 12 镜，首镜 00:00:00:00–00:00:05:00，末镜 00:00:55:00–00:01:00:00；抖音规则集报 1 条 warning（首镜 5.0s 超过 3s 钩子窗口，heuristic 口径），0 条 error。同时写出 3,695 字节的 shots.json 和 7,546 字节的 shots.html。",
+          "en": "analyze finds 12 shots: the first runs 00:00:00:00–00:00:05:00 and the last 00:00:55:00–00:01:00:00. The Douyin rule set reports one warning (shot 1 lasts 5.0s, past the 3s hook window, a heuristic) and zero errors. It writes a 3,695-byte shots.json and a 7,546-byte shots.html."
+        },
+        "image": "/assets/demo-analyze-light.svg",
+        "imageDark": "/assets/demo-analyze-dark.svg",
+        "command": "uv run shotsheet analyze demo-run/demo.mp4 --platform douyin -o demo-run/shots.json --html demo-run/shots.html",
+        "output": "12 shots -> demo-run/shots.json (sheet: demo-run/shots.html); rules: 1 finding(s), 0 error(s)"
+      },
+      {
+        "label": {
+          "zh": "先看导出计划",
+          "en": "Inspect the export plan"
+        },
+        "body": {
+          "zh": "dry-run 不写任何文件，只打印计划：画布 1080×1920（9:16），总长 00:01:00.000；视频轨 12 段，文字轨 0 段（合成片源没有音轨，因此本轮没有 ASR 字幕）。",
+          "en": "dry-run writes nothing and only prints the plan: a 1080×1920 canvas (9:16), 00:01:00.000 total, 12 video segments and 0 text segments (the synthetic clip has no audio, so this run has no ASR captions)."
+        },
+        "image": "/assets/demo-plan-light.svg",
+        "imageDark": "/assets/demo-plan-dark.svg",
+        "command": "uv run shotsheet export demo-run/shots.json --jianying-dir demo-run/jianying --draft-name demo-teardown --dry-run",
+        "output": "canvas 1080x1920 (9:16), 00:01:00.000 total; video track: 12 segment(s); text track: 0 segment(s)"
+      },
+      {
+        "label": {
+          "zh": "写出明文 draft",
+          "en": "Write the plaintext draft"
+        },
+        "body": {
+          "zh": "正式导出写出 12 个视频段、0 个文字段，draft root 是 demo-run/jianying，工程目录是 demo-teardown：root_meta_info.json 1,162 字节，draft_content.json 25,004 字节，draft_meta_info.json 2,066 字节，时间线 60,000,000 µs。格式是剪映专业版 5.x/6.x 的明文 draft_content.json；10.1 的加密 draft_info.json 不写也不解密，本次也没有在运行中的剪映里实测导入。",
+          "en": "The real export writes 12 video segments and 0 text segments under the demo-run/jianying draft root, with a project folder named demo-teardown: root_meta_info.json is 1,162 bytes, draft_content.json 25,004 bytes and draft_meta_info.json 2,066 bytes, with a 60,000,000 µs timeline. The format is the plaintext draft_content.json read by Jianying Professional 5.x/6.x; 10.1's encrypted draft_info.json is neither written nor decrypted, and this export was not live-imported into a running editor."
+        },
+        "image": "/assets/demo-draft-light.svg",
+        "imageDark": "/assets/demo-draft-dark.svg",
+        "command": "uv run shotsheet export demo-run/shots.json --jianying-dir demo-run/jianying --video demo-run/demo.mp4 --draft-name demo-teardown",
+        "output": "12 video + 0 text segment(s) -> demo-run/jianying/demo-teardown (draft root: demo-run/jianying); plaintext draft_content.json for 剪映专业版 5.x/6.x; 10.1 uses encrypted draft_info.json"
+      }
+    ]
+  },
+  "quickstart": {
+    "title": {
+      "zh": "快速开始",
+      "en": "Quickstart"
+    },
+    "body": {
+      "zh": "需要 Python 3.11+（录制环境是 3.13）、uv 和 ffmpeg 命令行。第二条命令会生成一条 6 秒、3 个硬切的竖屏测试片，所以不需要准备素材。",
+      "en": "Python 3.11+ (3.13 in the recording), uv and the ffmpeg CLI. The second command builds a 6-second vertical test clip with three hard cuts, so no footage is needed."
+    },
+    "steps": [
+      {
+        "title": {
+          "zh": "克隆并安装依赖",
+          "en": "Clone and install"
+        },
+        "code": "git clone https://github.com/SuperMarioYL/shotsheet.git\ncd shotsheet\nuv sync"
+      },
+      {
+        "title": {
+          "zh": "生成 3 镜测试片",
+          "en": "Build a three-shot test clip"
+        },
+        "code": "ffmpeg -y \\\n  -f lavfi -i \"color=c=0x101820:s=540x960:d=2:r=30\" \\\n  -f lavfi -i \"color=c=0xf2b134:s=540x960:d=2:r=30\" \\\n  -f lavfi -i \"color=c=0x17365f:s=540x960:d=2:r=30\" \\\n  -filter_complex \"[0:v][1:v][2:v]concat=n=3:v=1:a=0\" \\\n  -pix_fmt yuv420p demo.mp4"
+      },
+      {
+        "title": {
+          "zh": "切镜并写出分镜表",
+          "en": "Detect cuts and write the sheet"
+        },
+        "code": "uv run shotsheet analyze demo.mp4 --platform douyin -o shots.json"
+      },
+      {
+        "title": {
+          "zh": "打开本地编辑页",
+          "en": "Open the local editor"
+        },
+        "code": "uv run shotsheet serve\n# http://127.0.0.1:8787"
+      },
+      {
+        "title": {
+          "zh": "预览并写出剪映 draft",
+          "en": "Preview and write the Jianying draft"
+        },
+        "code": "uv run shotsheet export shots.json --jianying-dir ./jianying --dry-run\nuv run shotsheet export shots.json --jianying-dir ./jianying --video demo.mp4"
+      }
+    ]
+  },
+  "limitations": [
+    {
+      "zh": "录制的输入是一条合成片源：12 个切点都是高对比硬切，所以检测结果正好是 12 镜。真实素材可能得到不同的镜头数；片源过短或只有一镜时，工具会给出提示。",
+      "en": "The recorded input is synthetic: all 12 cuts are high-contrast hard cuts, so detection returned exactly 12 shots. Real footage may produce a different count; a clip that yields a single shot is flagged."
+    },
+    {
+      "zh": "本轮没有使用视觉 Key，录制结果里的景别、机位、运镜、道具和场景为空；describe 管线由离线测试中的 mock provider 覆盖。视觉模型本身也会判断错，所以每个单元格都能改，每条都能回查 tc_in。",
+      "en": "No vision key was used in this run, so shot size, camera, movement, props and scene are empty in the recorded result; the describe pipeline is covered by offline tests with a mocked provider. Vision models also get these fields wrong, which is why every cell is editable and every row keeps its tc_in."
+    },
+    {
+      "zh": "剪映导出只面向明文 draft_content.json（version 360000 / new_version 75.0.0，5.x/6.x 读取的格式）。剪映 10.1 把时间线存进加密的 draft_info.json，本工具不写也不解密；因此 m3 的「实测导入」与「切点误差 <200 ms」两项验收均为 UNVERIFIED，本次没有在运行中的剪映里导入过。",
+      "en": "The Jianying export targets plaintext draft_content.json only (version 360000 / new_version 75.0.0, the format read by 5.x/6.x). Jianying 10.1 stores its timeline in an encrypted draft_info.json, which this tool neither writes nor decrypts; the live-import and per-cut <200 ms acceptance checks are therefore UNVERIFIED, and this export was never imported into a running editor."
+    },
+    {
+      "zh": "v0.1 只接受本地文件，不下载抖音、小红书或视频号链接，也不处理与平台下载相关的合规问题。",
+      "en": "v0.1 accepts local files only. It does not download Douyin, Xiaohongshu or Channels URLs and does not address the compliance questions that come with platform downloads."
+    },
+    {
+      "zh": "无法定位已经烧进画面里的字幕。字幕安全区校验的是 source.caption_box 这块计划字幕区，规则 id 写成 planned_caption_safe_area 就是这个原因。",
+      "en": "Captions already burned into the picture cannot be located. The safe-area check validates source.caption_box, the planned band, which is why the rule id is planned_caption_safe_area."
+    },
+    {
+      "zh": "开场钩子窗口与字幕安全区是社区观察的经验值，在 YAML 里标为 heuristic；时长上下限来自平台公开规则页，但发布时仍以发布页提示为准。平台改版后需要改 YAML。",
+      "en": "The opening-hook window and subtitle safe areas are community-observed heuristics, marked heuristic in the YAML; duration limits come from public platform policy pages, but the publishing page remains authoritative at upload time. A platform change means editing the YAML."
+    },
+    {
+      "zh": "批量队列、共享模板库、多账号并行和托管上传属于 v0.2 路线，v0.1 没有实现。v0.1 的边界是本地文件进、可拍物料出。",
+      "en": "Batch queues, a shared template library, multi-account parallelism and hosted upload are v0.2 roadmap items, not implemented in v0.1. The v0.1 boundary is local file in, shootable material out."
+    }
+  ],
+  "scene": {
+    "kind": "neon-graph",
+    "fallback": "/assets/scene-dark.svg",
+    "fallbackLight": "/assets/scene-light.svg",
+    "caption": {
+      "zh": "示意场景：一条竖屏片源被切成带时间码的镜头，规则检查后写出分镜表与一条剪映时间线。确切计数以下方录制演示为准。",
+      "en": "Illustrative scene: a vertical clip is cut into shots with timecodes, checked against the rules, then written as a shot sheet and a Jianying timeline. Exact counts belong to the recorded demo below."
+    }
+  },
+  "story": {
+    "intro": {
+      "title": {
+        "zh": "最费时间的不是看懂，\n是把它翻译成能拍的计划",
+        "en": "The expensive part is not understanding.\nIt is translating the clip into a plan"
+      },
+      "body": {
+        "zh": "照着一条爆款拍第二条，人工做法是暂停、回拖两秒、再暂停，把机位、景别、道具和每镜停多久记下来；一条 60 秒的片子要 1–2 小时，最后得到的是一页只有作者看得懂的笔记。拉片单把这一步变成可执行的记录：字段固定、每条带 tc_in、平台规则有 id、整份 sheet 可以 diff，还能直接写出剪映 draft。",
+        "en": "Remaking a hit video starts with a manual loop: pause, scrub back two seconds, pause again, and write down the camera position, framing, props and how long each shot held. A 60-second clip takes one to two hours, and the result is a page only its author can read. ShotSheet turns that step into an executable record: fixed fields, a tc_in on every row, platform rule ids, a sheet you can diff, and a Jianying draft written directly from it."
+      }
+    },
+    "sections": [
+      {
+        "title": {
+          "zh": "从一条本地视频到一张可照着拍的表",
+          "en": "From one local clip to a shootable sheet"
+        },
+        "body": {
+          "zh": "analyze 用 scenedetect 找镜头边界，并从视频流读取时长与帧率；加 --transcribe 时用 faster-whisper 补充字幕。describe 为每一镜按 15%、50%、85% 的位置抽 3 帧，交给 OpenAI 兼容的视觉接口填景别、机位、运镜、道具和场景，默认豆包，可切通义千问 VL。rules 再读取 cn-platforms.yaml 的时长、钩子与计划字幕区规则，最后写出 shots.json 和 A4 版式的 shots.html。",
+          "en": "analyze finds shot boundaries with scenedetect and reads duration and frame rate from the video stream; --transcribe adds captions via faster-whisper. describe samples three frames per shot at 15%, 50% and 85%, then asks an OpenAI-compatible vision endpoint for shot size, camera, movement, props and scene — Doubao by default, Qwen VL as the alternative. rules applies the duration, hook and planned-caption rules from cn-platforms.yaml, and the run writes shots.json plus the A4 shots.html."
+        },
+        "image": {
+          "light": "/assets/process-light.svg",
+          "dark": "/assets/process-dark.svg",
+          "alt": {
+            "zh": "处理流程：本地视频经过切镜与转写、逐镜视觉描述、三平台规则校验，最后写出 shots.json、shots.html 与剪映 draft",
+            "en": "Process: a local clip goes through cut detection and transcription, per-shot vision description and three-platform rule checks, then becomes shots.json, shots.html and a Jianying draft"
+          },
+          "mobile": {
+            "light": "/assets/process-mobile-light.svg",
+            "dark": "/assets/process-mobile-dark.svg"
+          }
+        }
+      },
+      {
+        "title": {
+          "zh": "一个进程，五个模块，没有数据库",
+          "en": "One process, five modules, no database"
+        },
+        "body": {
+          "zh": "浏览器单页由 FastAPI 提供，和 CLI 共用同一条管线：pipeline/analyze.py 负责切镜与读取流信息，pipeline/describe.py 抽帧并调用视觉接口，pipeline/rules.py 只读 YAML 做校验；render/shotlist_html.py 生成 A4 表，render/jianying.py 把 tc_in/tc_out 换成微秒写 draft。每个任务一个临时工作目录，跑完可删；页面里的内联编辑复用同一份表格标记，改动写回你打开的那份 shots.json。",
+          "en": "The browser page is served by FastAPI and shares one pipeline with the CLI: pipeline/analyze.py detects cuts and reads stream metadata, pipeline/describe.py samples frames and calls the vision endpoint, pipeline/rules.py validates against the YAML. render/shotlist_html.py builds the A4 sheet, and render/jianying.py converts tc_in/tc_out to microseconds and writes the draft. Each job gets a temporary working directory that can be deleted; inline editing reuses the same table markup and writes back to the shots.json you opened."
+        },
+        "image": {
+          "light": "/assets/architecture-light.svg",
+          "dark": "/assets/architecture-dark.svg",
+          "alt": {
+            "zh": "架构：浏览器单页与 CLI 共用五段管线，输入本地视频和可选视觉 Key，输出 shots.json、A4 分镜表与剪映 draft 目录",
+            "en": "Architecture: the browser page and the CLI share a five-stage pipeline that takes a local clip and an optional vision key, and emits shots.json, an A4 sheet and a Jianying draft folder"
+          },
+          "mobile": {
+            "light": "/assets/architecture-mobile-light.svg",
+            "dark": "/assets/architecture-mobile-dark.svg"
+          }
+        }
+      },
+      {
+        "title": {
+          "zh": "三套平台规则，一份明文剪映工程",
+          "en": "Three platform rule sets, one plaintext Jianying project"
+        },
+        "body": {
+          "zh": "抖音 9:16、小红书 3:4、视频号 9:16 三套画幅来自同一份 YAML；时长上限引用公开规则页，钩子窗口与字幕安全区是标注过的经验值。导出先由 --dry-run 打印画布、轨道与段数，真正写盘时每镜一个段，draft 名与 id 都带平台和画幅。明文 draft_content.json 对应剪映专业版 5.x/6.x；10.1 的加密 draft_info.json 不读也不写，这一点在下面的限制里再说一次。",
+          "en": "Douyin 9:16, Xiaohongshu 3:4 and Channels 9:16 come from the same YAML; duration caps cite public policy pages, while the hook window and safe areas are labelled heuristics. --dry-run prints the canvas, tracks and segment count first; the real export writes one segment per shot, with platform and aspect in the draft name and id. The plaintext draft_content.json targets Jianying Professional 5.x/6.x; 10.1's encrypted draft_info.json is neither read nor written, repeated under limitations."
+        },
+        "image": {
+          "light": "/assets/capabilities-light.svg",
+          "dark": "/assets/capabilities-dark.svg",
+          "alt": {
+            "zh": "能力与集成：本地视频、两个视觉 provider、三套平台规则，连接到 shots.json、A4 分镜表和剪映明文 draft",
+            "en": "Capabilities and integration: local video, two vision providers and three platform rule sets connect to shots.json, the A4 sheet and the plaintext Jianying draft"
+          },
+          "mobile": {
+            "light": "/assets/capabilities-mobile-light.svg",
+            "dark": "/assets/capabilities-mobile-dark.svg"
+          }
+        }
+      }
+    ],
+    "details": [
+      {
+        "title": {
+          "zh": "配置：平台规则只有一份 YAML",
+          "en": "Configuration: platform rules live in one YAML"
+        },
+        "body": {
+          "zh": "src/shotsheet/rules/cn-platforms.yaml 是平台规则的唯一来源，pipeline/rules.py 不硬编码任何平台数字。时长上下限、画幅、钩子窗口和字幕安全区都在这里改；planned caption box 用 top,bottom,left,right 四个百分比表示，默认 72,80,6,88。越界时 rules 以退出码 1 结束，CI 可以直接用。",
+          "en": "src/shotsheet/rules/cn-platforms.yaml is the only source of platform rules; pipeline/rules.py hardcodes no platform number. Duration limits, aspect ratio, hook window and safe areas are all edited here. The planned caption box uses four percentages — top, bottom, left, right — defaulting to 72,80,6,88. An out-of-bounds band makes rules exit 1, so CI can gate on it."
+        },
+        "code": "uv run shotsheet rules shots.json --caption-box 88,100,4,96"
+      },
+      {
+        "title": {
+          "zh": "视觉：豆包默认，可切通义千问 VL",
+          "en": "Vision: Doubao by default, Qwen VL as the alternative"
+        },
+        "body": {
+          "zh": "describe 读取 ARK_API_KEY 或 DASHSCOPE_API_KEY，也可以在网页里为单次请求临时粘贴。默认 doubao-seed-2-1-pro-260915；--provider qwen 切到 qwen3-vl-plus。请求失败或返回值不是 JSON 会报错，未覆盖的镜头字段保持为空并打印覆盖计数；--no-vision 完全跳过视觉，只用切镜和规则。",
+          "en": "describe reads ARK_API_KEY or DASHSCOPE_API_KEY, and the page can accept a key for a single request. The default is doubao-seed-2-1-pro-260915; --provider qwen switches to qwen3-vl-plus. A failed request or a non-JSON answer raises an error, uncovered shots keep empty fields and a coverage count is printed; --no-vision skips vision entirely and keeps cut detection and rules."
+        },
+        "code": "export ARK_API_KEY=...\nuv run shotsheet describe shots.json --video demo.mp4 --provider doubao"
+      },
+      {
+        "title": {
+          "zh": "网页：改动写回你打开的那份 shots.json",
+          "en": "The page writes back to the shots.json you opened"
+        },
+        "body": {
+          "zh": "serve 只监听 127.0.0.1。用「打开已有 shots.json」载入 analyze 写出的文件后，改景别、机位、运镜、道具或场景会 PUT 回同一个路径，页面显示当前写入路径并重新跑规则；在页面里直接分析的视频则写入一个临时 shots.json。",
+          "en": "serve listens on 127.0.0.1 only. Load the file analyze wrote with open an existing shots.json; editing shot size, camera, movement, props or scene PUTs back to that path, the page shows the current write path and the rules re-run. A clip analysed inside the page goes to a scratch shots.json."
+        },
+        "code": "uv run shotsheet serve\n# open http://127.0.0.1:8787"
+      },
+      {
+        "title": {
+          "zh": "剪映：先 dry-run，再写盘",
+          "en": "Jianying: dry-run first, then write"
+        },
+        "body": {
+          "zh": "导出会写出 root_meta_info.json 和 <draft-name>/ 目录。把 <draft-name> 复制进剪映的 com.lveditor.draft，并把 all_draft_store 条目合并进去即可注册；也可以直接把 --jianying-dir 指向 com.lveditor.draft，工具会按 draft id 合并而不清掉已有工程。同名目录已经是另一个 draft id 时会拒绝覆盖。",
+          "en": "The export writes root_meta_info.json and a <draft-name>/ folder. Copy <draft-name> into Jianying's com.lveditor.draft and merge the all_draft_store entry to register it; alternatively point --jianying-dir straight at com.lveditor.draft, where the tool merges by draft id without erasing existing projects. A folder that already holds a different draft id is not overwritten."
+        },
+        "code": "uv run shotsheet export shots.json --jianying-dir ./jianying --dry-run\nuv run shotsheet export shots.json --jianying-dir ./jianying --video demo.mp4"
+      }
+    ]
+  },
+  "cta": {
+    "headline": {
+      "zh": "先把这一条拆完，\n再决定怎么拍。",
+      "en": "Teardown the reference first,\nthen plan the shoot."
+    },
+    "sub": {
+      "zh": "本地、MIT、Python 3.11+。一条 60 秒合成片在录制机器上得到 12 镜，导出 12 段、60,000,000 µs 的明文剪映 draft；换成你自己的片子，命令不变。",
+      "en": "Local, MIT, Python 3.11+. A 60-second synthetic clip produced 12 shots on the recording machine and exported 12 segments, 60,000,000 µs of plaintext Jianying draft; swap in your own clip and the commands stay the same."
+    },
+    "button": {
+      "zh": "在 GitHub 上开始",
+      "en": "Get started on GitHub"
+    }
+  },
+  "footer": {
+    "tag": {
+      "zh": "本地运行 · 无账号 · MIT · Python 3.11+",
+      "en": "Local · no account · MIT · Python 3.11+"
+    }
+  },
+  "metadata": {
+    "visual_direction": "Dark-first neon timeline: a vertical source clip resolves into timecoded shots, a rule band and a Jianying draft; blueprint grid, monospace evidence, thin wires with traveling pulses. Light figures keep the same semantic tokens from palette.json at readable contrast. The particle scene is illustrative and separate from the recorded demo facts.",
+    "content_version": 1,
+    "source_version": "v0.1.0"
+  }
+}
