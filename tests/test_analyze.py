@@ -25,12 +25,16 @@ from shotsheet.pipeline.analyze import (
     attach_captions,
     transcribe_video,
 )
+from shotsheet.pipeline.rules import Violation
 from shotsheet.render.shotlist_html import render_shotlist_html
 from shotsheet.schema import (
+    Camera,
     Caption,
+    Movement,
     Platform,
     Shot,
     ShotSheet,
+    ShotSize,
     Source,
     format_timecode,
     parse_timecode,
@@ -95,15 +99,50 @@ def test_timecode_frame_count_matches_real_duration() -> None:
         assert parse_timecode(timecode, fps) == pytest.approx(frame_num / fps)
 
 
-def test_render_shotlist_html_has_only_timeline_and_caption_columns() -> None:
+def test_render_shotlist_html_has_timeline_caption_and_rule_columns() -> None:
     html = render_shotlist_html(_sample_sheet())
 
-    assert html.count("</th>") == 2
+    assert html.count("</th>") == 3
     assert "时间码 / 镜头" in html
     assert "字幕" in html
+    assert "规则" in html
     assert "00:00:00:00 → 00:00:02:00" in html
     assert "开场就在厨房" in html
     assert html.count("<tr>") == 3
+
+
+def test_render_shotlist_html_shows_vision_fields_and_violations() -> None:
+    sheet = _sample_sheet()
+    sheet.shots[0].shot_size = ShotSize.CLOSE_UP
+    sheet.shots[0].camera = Camera.EYE_LEVEL
+    sheet.shots[0].movement = Movement.NONE
+    sheet.shots[0].props = ["马克杯"]
+    sheet.shots[0].scene = "厨房台面"
+    violations = [
+        Violation(
+            rule_id="douyin.hook_window",
+            platform=Platform.DOUYIN,
+            shot_index=0,
+            severity="warning",
+            message="开场镜头过长",
+        ),
+        Violation(
+            rule_id="douyin.duration",
+            platform=Platform.DOUYIN,
+            shot_index=None,
+            severity="error",
+            message="整条视频超过上限",
+        ),
+    ]
+
+    html = render_shotlist_html(sheet, violations)
+
+    assert "特写" in html
+    assert "平视" in html
+    assert "道具：马克杯" in html
+    assert "场景：厨房台面" in html
+    assert "[douyin.hook_window] 开场镜头过长" in html
+    assert html.index("整条视频超过上限") < html.index("<table>")
 
 
 class _FakeSegment:
@@ -311,7 +350,7 @@ def test_cli_analyze_writes_json_and_html(synthetic_clip: Path) -> None:
     assert len(payload["shots"]) >= 2
 
     html = html_path.read_text(encoding="utf-8")
-    assert html.count("</th>") == 2
+    assert html.count("</th>") == 3
     assert payload["shots"][0]["tc_in"] in html
 
 

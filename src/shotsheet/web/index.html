@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>拉片单 · ShotSheet</title>
+<style>
+  :root {
+    --bg: #0f1216;
+    --panel: #171c22;
+    --panel-2: #1f262e;
+    --line: #303944;
+    --text: #e8edf3;
+    --muted: #9aa7b5;
+    --accent: #4fb3ff;
+    --error: #ff7b8a;
+    --warning: #f0b35a;
+    --ok: #74d08a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(circle at 15% 0%, #1b2530 0, var(--bg) 45%);
+    color: var(--text);
+    font-family: -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    line-height: 1.55;
+  }
+  main { max-width: 1180px; margin: 0 auto; padding: 40px 20px 80px; }
+  header h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: 0.02em; }
+  header h1 span { color: var(--accent); font-weight: 600; font-size: 18px; margin-left: 8px; }
+  .lead { margin: 0 0 28px; color: var(--muted); max-width: 760px; }
+  .dropzone {
+    border: 1.5px dashed var(--line);
+    border-radius: 14px;
+    background: var(--panel);
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .dropzone:hover, .dropzone.over { border-color: var(--accent); background: var(--panel-2); }
+  .dropzone strong { display: block; font-size: 17px; margin-bottom: 6px; }
+  .dropzone span { color: var(--muted); font-size: 13px; }
+  #filename { margin-top: 12px; color: var(--accent); font-size: 14px; min-height: 20px; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 14px;
+    margin-top: 18px;
+    padding: 18px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label, .check { color: var(--muted); font-size: 13px; }
+  select, button {
+    font: inherit;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    padding: 9px 12px;
+  }
+  .check { display: flex; align-items: center; gap: 7px; padding-bottom: 10px; }
+  .check input { accent-color: var(--accent); width: 16px; height: 16px; }
+  button {
+    margin-left: auto;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #06121d;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 10px 22px;
+  }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .status { min-height: 24px; margin: 14px 2px 0; color: var(--muted); font-size: 14px; }
+  .status.error { color: var(--error); }
+  .result { margin-top: 26px; }
+  .summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 22px;
+    padding: 16px 18px;
+    border: 1px solid var(--line);
+    border-radius: 12px 12px 0 0;
+    background: var(--panel);
+    font-size: 14px;
+  }
+  .summary b { color: var(--accent); font-weight: 600; }
+  .notice { margin: 0; padding: 12px 18px; border: 1px solid var(--line); border-top: 0; background: var(--panel); font-size: 13px; }
+  .notice.warning { color: var(--warning); }
+  .notice.error { color: var(--error); }
+  .notice.ok { color: var(--ok); }
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-top: 0;
+    border-radius: 0 0 12px 12px;
+    background: var(--panel);
+  }
+  .table-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .table-wrap th, .table-wrap td {
+    border-bottom: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    padding: 10px 12px;
+    vertical-align: top;
+    text-align: left;
+  }
+  .table-wrap th { background: var(--panel-2); color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .table-wrap tr:last-child td { border-bottom: 0; }
+  .table-wrap th:last-child, .table-wrap td:last-child { border-right: 0; }
+  .table-wrap .timeline { width: 210px; }
+  .table-wrap .caption { width: 300px; }
+  .table-wrap .tc { font-variant-numeric: tabular-nums; color: var(--text); }
+  .table-wrap .index { color: var(--muted); margin-right: 6px; }
+  .table-wrap .dur { color: var(--muted); font-size: 12px; }
+  .table-wrap .vision { margin-top: 6px; color: var(--text); }
+  .table-wrap .props { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .table-wrap .violation { font-size: 12px; margin-bottom: 5px; }
+  .table-wrap .violation.error, .sheet-violations .violation.error { color: var(--error); }
+  .table-wrap .violation.warning, .sheet-violations .violation.warning { color: var(--warning); }
+  .table-wrap .ok { color: var(--ok); font-size: 12px; }
+  .sheet-violations { padding: 12px 18px; border: 1px solid var(--line); border-top: 0; background: var(--panel); font-size: 13px; }
+  .sheet-violations .violation { margin-bottom: 5px; }
+  footer { margin-top: 42px; color: var(--muted); font-size: 12px; }
+  @media (max-width: 720px) {
+    main { padding: 24px 14px 60px; }
+    button { margin-left: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>拉片单 <span>ShotSheet</span></h1>
+    <p class="lead">
+      拖入一条本地短视频，自动切成镜头，逐镜填景别、机位、运镜、道具与场景，
+      再按抖音 / 小红书 / 视频号的规则标出字幕安全区与开场钩子问题。视频只在本机处理。
+    </p>
+  </header>
+
+  <section id="drop" class="dropzone" tabindex="0" role="button" aria-label="选择或拖入视频">
+    <input id="file" type="file" accept="video/*" hidden>
+    <strong>把视频拖到这里</strong>
+    <span>或点击选择本地文件 · 支持 mp4 / mov / mkv</span>
+    <div id="filename"></div>
+  </section>
+
+  <section class="controls">
+    <div class="field">
+      <label for="platform">目标平台</label>
+      <select id="platform">
+        <option value="douyin">抖音</option>
+        <option value="xiaohongshu">小红书</option>
+        <option value="shipinhao">视频号</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="provider">视觉模型</label>
+      <select id="provider">
+        <option value="doubao">字节火山方舟（豆包视觉）</option>
+        <option value="qwen">阿里云百炼（通义千问 VL）</option>
+      </select>
+    </div>
+    <label class="check"><input id="vision" type="checkbox" checked> 视觉描述</label>
+    <label class="check"><input id="transcribe" type="checkbox"> 转写字幕（首次会下载模型）</label>
+    <button id="run" type="button" disabled>开始分析</button>
+  </section>
+
+  <p id="status" class="status">等待选择视频。</p>
+
+  <section id="result" class="result" hidden>
+    <div id="summary" class="summary"></div>
+    <div id="notices"></div>
+    <div id="sheet-violations" class="sheet-violations" hidden></div>
+    <div id="sheet" class="table-wrap"></div>
+  </section>
+
+  <footer>v0.1 · 本地运行 · 不上传视频，不需要登录。</footer>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const platformLabels = { douyin: "抖音", xiaohongshu: "小红书", shipinhao: "视频号" };
+  const state = { file: null };
+
+  const drop = $("drop");
+  const fileInput = $("file");
+  const runButton = $("run");
+  const statusLine = $("status");
+
+  function setStatus(text, kind) {
+    statusLine.textContent = text;
+    statusLine.className = "status" + (kind ? " " + kind : "");
+  }
+
+  async function loadConfig() {
+    try {
+      const response = await fetch("/config");
+      if (!response.ok) return;
+      const config = await response.json();
+      const select = $("provider");
+      select.innerHTML = "";
+      for (const provider of config.providers) {
+        const option = document.createElement("option");
+        option.value = provider.id;
+        option.textContent = provider.label + " · " + provider.model;
+        if (!provider.available) option.textContent += "（未配置 Key）";
+        if (provider.id === config.default_provider) option.selected = true;
+        select.appendChild(option);
+      }
+      const available = config.providers.some((provider) => provider.available);
+      $("vision").checked = available;
+      $("vision").disabled = !available;
+      if (!available) {
+        setStatus("未检测到视觉 API Key：已关闭视觉描述，仍可做镜头切分与字幕。设置 ARK_API_KEY 后刷新即可。");
+      }
+    } catch (error) {
+      setStatus("无法读取服务配置：" + error.message, "error");
+    }
+  }
+
+  function selectFile(file) {
+    state.file = file || null;
+    $("filename").textContent = file ? file.name : "";
+    runButton.disabled = !file;
+    if (file) setStatus("已选择 " + file.name + "，点击开始分析。");
+  }
+
+  drop.addEventListener("click", () => fileInput.click());
+  drop.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      fileInput.click();
+    }
+  });
+  fileInput.addEventListener("change", () => selectFile(fileInput.files[0]));
+  for (const type of ["dragenter", "dragover"]) {
+    drop.addEventListener(type, (event) => {
+      event.preventDefault();
+      drop.classList.add("over");
+    });
+  }
+  for (const type of ["dragleave", "drop"]) {
+    drop.addEventListener(type, (event) => {
+      event.preventDefault();
+      drop.classList.remove("over");
+    });
+  }
+  drop.addEventListener("drop", (event) => {
+    const file = event.dataTransfer.files[0];
+    if (file) selectFile(file);
+  });
+
+  function render(data) {
+    const sheet = data.sheet;
+    $("summary").innerHTML = "";
+    const facts = [
+      ["文件", sheet.source.file],
+      ["平台", platformLabels[sheet.source.platform] || sheet.source.platform],
+      ["时长", (sheet.source.duration_ms / 1000).toFixed(2) + "s"],
+      ["镜头", sheet.shots.length + " 个"],
+      ["规则", sheet.rules || "未应用"],
+    ];
+    for (const [label, value] of facts) {
+      const item = document.createElement("div");
+      const strong = document.createElement("b");
+      strong.textContent = String(value);
+      item.append(label + "：");
+      item.appendChild(strong);
+      $("summary").appendChild(item);
+    }
+
+    const notices = $("notices");
+    notices.innerHTML = "";
+    for (const warning of data.warnings || []) {
+      const line = document.createElement("p");
+      line.className = "notice warning";
+      line.textContent = warning;
+      notices.appendChild(line);
+    }
+
+    const sheetViolations = (data.violations || []).filter((item) => item.shot_index === null);
+    const box = $("sheet-violations");
+    box.innerHTML = "";
+    if (sheetViolations.length) {
+      box.hidden = false;
+      for (const violation of sheetViolations) {
+        const line = document.createElement("div");
+        line.className = "violation " + violation.severity;
+        line.textContent = "[" + violation.rule_id + "] " + violation.message;
+        box.appendChild(line);
+      }
+    } else {
+      box.hidden = true;
+    }
+
+    // Server-rendered and autoescaped; keeps the printed sheet and UI identical.
+    $("sheet").innerHTML = data.table_html;
+    $("result").hidden = false;
+    $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function run() {
+    if (!state.file) return;
+    runButton.disabled = true;
+    setStatus("分析中… 60 秒视频通常需要 40–90 秒，请保持页面打开。", "");
+    $("result").hidden = true;
+
+    const form = new FormData();
+    form.append("file", state.file);
+    form.append("platform", $("platform").value);
+    form.append("provider", $("provider").value || "doubao");
+    form.append("vision", $("vision").checked ? "true" : "false");
+    form.append("transcribe", $("transcribe").checked ? "true" : "false");
+
+    try {
+      const response = await fetch("/analyze", { method: "POST", body: form });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || "分析失败（HTTP " + response.status + "）");
+      render(data);
+      setStatus("完成。逐镜结果见下表，规则列标出了越界项。");
+    } catch (error) {
+      setStatus("失败：" + error.message, "error");
+    } finally {
+      runButton.disabled = false;
+    }
+  }
+
+  runButton.addEventListener("click", run);
+  loadConfig();
+</script>
+</body>
+</html>

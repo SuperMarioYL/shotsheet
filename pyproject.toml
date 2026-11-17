@@ -31,6 +31,10 @@ dependencies = [
   "av>=12,<19",
   "jinja2>=3.1",
   "httpx>=0.27",
+  # Platform rules are data, not code.
+  "pyyaml>=6.0",
+  # FastAPI multipart uploads for the local web UI.
+  "python-multipart>=0.0.12",
 ]
 
 [project.scripts]
