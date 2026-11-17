@@ -1,6 +1,7 @@
 {
   "version": "0.1.0",
   "recorded_at": "2026-11-18",
+  "note": "Scratch paths under .builder_demo/ were temporary and were removed after recording; substitute your own output directory when rerunning the commands.",
   "environment": {
     "os": "macOS 27.2 arm64",
     "python": "3.13 (uv-managed venv; package requires >=3.11)",
@@ -41,8 +42,16 @@
       "shots": 12,
       "duration_ms": 60000,
       "fps": 30.0,
-      "first_shot": {"tc_in": "00:00:00:00", "tc_out": "00:00:05:00", "duration_ms": 5000},
-      "last_shot": {"tc_in": "00:00:55:00", "tc_out": "00:01:00:00", "duration_ms": 5000},
+      "first_shot": {
+        "tc_in": "00:00:00:00",
+        "tc_out": "00:00:05:00",
+        "duration_ms": 5000
+      },
+      "last_shot": {
+        "tc_in": "00:00:55:00",
+        "tc_out": "00:01:00:00",
+        "duration_ms": 5000
+      },
       "rule_set": "cn-platforms.yaml#douyin",
       "rule_findings": [
         {
@@ -66,12 +75,29 @@
       ],
       "version": 360000,
       "new_version": "75.0.0",
-      "canvas": {"width": 1080, "height": 1920, "ratio": "original"},
+      "canvas": {
+        "width": 1080,
+        "height": 1920,
+        "ratio": "original"
+      },
       "duration_us": 60000000,
       "video_segments": 12,
       "text_segments": 0,
       "segment_duration_us": 5000000,
-      "source_offsets_us": [0, 5000000, 10000000, 15000000, 20000000, 25000000, 30000000, 35000000, 40000000, 45000000, 50000000, 55000000],
+      "source_offsets_us": [
+        0,
+        5000000,
+        10000000,
+        15000000,
+        20000000,
+        25000000,
+        30000000,
+        35000000,
+        40000000,
+        45000000,
+        50000000,
+        55000000
+      ],
       "material": {
         "name": "demo.mp4",
         "path": "the absolute --video path was embedded in the draft"
