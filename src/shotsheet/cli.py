@@ -11,10 +11,15 @@ import typer
 
 from shotsheet import __version__
 from shotsheet.pipeline.analyze import DEFAULT_ASR_MODEL, AnalyzeError, analyze_video
-from shotsheet.pipeline.describe import DEFAULT_PROVIDER, describe_sheet
+from shotsheet.pipeline.describe import (
+    DEFAULT_PROVIDER,
+    describe_sheet,
+    require_api_key,
+    vision_coverage,
+)
 from shotsheet.pipeline.rules import RulesError, Violation, apply_platform_rules
 from shotsheet.render.shotlist_html import render_shotlist_html
-from shotsheet.schema import Platform, ShotSheet
+from shotsheet.schema import CaptionBox, Platform, ShotSheet
 
 app = typer.Typer(add_completion=False, help="Shot-level teardown for short-form video.")
 
@@ -72,9 +77,17 @@ def analyze(
         str | None,
         typer.Option("--language", help="Spoken language, e.g. zh; auto-detect when omitted."),
     ] = None,
+    caption_box: Annotated[
+        str | None,
+        typer.Option(
+            "--caption-box",
+            help="Planned caption box as top,bottom,left,right percentages (default 88,100,4,96).",
+        ),
+    ] = None,
 ) -> None:
     """Detect shot boundaries in VIDEO and write shots.json plus a printable sheet."""
     try:
+        box = _caption_box(caption_box)
         sheet = analyze_video(
             video,
             platform=platform,
@@ -82,6 +95,8 @@ def analyze(
             asr_model=asr_model,
             language=language,
         )
+        if box is not None:
+            sheet = _with_caption_box(sheet, box)
         report = apply_platform_rules(sheet)
     except (AnalyzeError, RulesError) as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
@@ -94,14 +109,14 @@ def analyze(
 
 @app.command()
 def describe(
-    video: Annotated[
+    source: Annotated[
         Path,
         typer.Argument(
             exists=True,
             dir_okay=False,
             readable=True,
             resolve_path=True,
-            help="Local video file used to extract per-shot frames.",
+            help="Local video file, or a shots.json from analyze (detected by .json suffix).",
         ),
     ],
     sheet_path: Annotated[
@@ -112,7 +127,18 @@ def describe(
             dir_okay=False,
             readable=True,
             resolve_path=True,
-            help="Existing shots.json; when omitted, VIDEO is analysed (without ASR) first.",
+            help="Existing shots.json; SOURCE is then the video used to extract frames.",
+        ),
+    ] = None,
+    video: Annotated[
+        Path | None,
+        typer.Option(
+            "--video",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+            resolve_path=True,
+            help="Source video when SOURCE is a sheet and it is not beside the JSON.",
         ),
     ] = None,
     output: Annotated[
@@ -127,7 +153,7 @@ def describe(
     ] = None,
     platform: Annotated[
         Platform,
-        typer.Option("--platform", help="Platform used when VIDEO is analysed from scratch."),
+        typer.Option("--platform", help="Platform used when the video is analysed from scratch."),
     ] = Platform.DOUYIN,
     provider: Annotated[
         str,
@@ -137,19 +163,55 @@ def describe(
         bool,
         typer.Option("--no-vision", help="Keep vision fields empty; no API key is needed."),
     ] = False,
+    caption_box: Annotated[
+        str | None,
+        typer.Option(
+            "--caption-box",
+            help="Planned caption box as top,bottom,left,right percentages (default 88,100,4,96).",
+        ),
+    ] = None,
 ) -> None:
-    """Fill 景别/机位/运镜/道具/场景 for each shot via a vision model."""
+    """Fill 景别/机位/运镜/道具/场景 for each shot via a vision model.
+
+    SOURCE may be a video (analysed first) or a shots.json produced by analyze.
+    With a sheet, the video is looked up beside the JSON and can be overridden
+    with --video.
+    """
     try:
-        if sheet_path is not None:
-            try:
-                sheet = ShotSheet.model_validate_json(sheet_path.read_text(encoding="utf-8"))
-            except ValueError as exc:
-                raise AnalyzeError(f"invalid sheet JSON {sheet_path}: {exc}") from exc
-        else:
-            sheet = analyze_video(video, platform=platform)
+        box = _caption_box(caption_box)
+        sheet_input, media = _describe_inputs(source, sheet_path, video)
+        sheet = _read_sheet(sheet_input) if sheet_input is not None else None
 
         if not no_vision:
-            sheet = describe_sheet(sheet, video, provider=provider)
+            # Validate the key before touching the video, so `describe out.json`
+            # without one names ARK_API_KEY/DASHSCOPE_API_KEY instead of
+            # complaining that the sheet is not a video.
+            _provider, api_key = require_api_key(provider)
+            if media is None and sheet is not None:
+                media = _sibling_video(sheet_input, sheet)
+            if media is None:
+                missing = sheet.source.file if sheet is not None else source.name
+                raise AnalyzeError(
+                    f"找不到源视频 {missing}；请用 --video 指定它的路径，"
+                    "或加 --no-vision 只校验规则、不做视觉描述。"
+                )
+            if sheet is None:
+                sheet = analyze_video(media, platform=platform)
+            sheet = describe_sheet(sheet, media, provider=provider, api_key=api_key)
+            covered, total = vision_coverage(sheet)
+            typer.echo(f"vision coverage: {covered}/{total} shots")
+            if covered < total:
+                typer.secho(
+                    f"warning: 视觉覆盖 {covered}/{total} 镜；未覆盖镜头的字段为空，"
+                    "详见上面的模型返回值警告。",
+                    fg=typer.colors.YELLOW,
+                    err=True,
+                )
+        elif sheet is None:
+            sheet = analyze_video(media or source, platform=platform)
+
+        if box is not None:
+            sheet = _with_caption_box(sheet, box)
         report = apply_platform_rules(sheet)
     except (AnalyzeError, RulesError) as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
@@ -159,6 +221,34 @@ def describe(
     skipped = " (vision skipped)" if no_vision else ""
     typer.echo(f"{len(report.sheet.shots)} shots -> {output} (sheet: {html_path}){skipped}")
     _echo_rule_summary(report.violations)
+
+
+def _describe_inputs(
+    source: Path, sheet_option: Path | None, video_option: Path | None
+) -> tuple[Path | None, Path | None]:
+    """Return ``(sheet_json, video)`` from the flexible describe arguments."""
+    if sheet_option is not None:
+        if source.suffix.lower() == ".json":
+            raise AnalyzeError(
+                "同时给出 --sheet 时，位置参数应是源视频；"
+                "或去掉 --sheet，直接把 JSON 放在位置参数。"
+            )
+        return sheet_option, video_option or source
+    if source.suffix.lower() == ".json":
+        return source, video_option
+    return None, source
+
+
+def _read_sheet(path: Path) -> ShotSheet:
+    try:
+        return ShotSheet.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise AnalyzeError(f"not a shot sheet JSON {path}: {exc}") from exc
+
+
+def _sibling_video(sheet_path: Path, sheet: ShotSheet) -> Path | None:
+    candidate = sheet_path.parent / sheet.source.file
+    return candidate if candidate.is_file() else None
 
 
 @app.command()
@@ -180,14 +270,24 @@ def rules(
     as_json: Annotated[
         bool, typer.Option("--json", help="Print findings as a JSON array.")
     ] = False,
+    caption_box: Annotated[
+        str | None,
+        typer.Option(
+            "--caption-box",
+            help="Planned caption box as top,bottom,left,right percentages (default 88,100,4,96).",
+        ),
+    ] = None,
 ) -> None:
     """Validate a sheet against the platform rules and print every finding."""
     try:
+        box = _caption_box(caption_box)
         sheet = ShotSheet.model_validate_json(sheet_file.read_text(encoding="utf-8"))
         if platform is not None:
             sheet = sheet.model_copy(
                 update={"source": sheet.source.model_copy(update={"platform": platform})}
             )
+        if box is not None:
+            sheet = _with_caption_box(sheet, box)
         report = apply_platform_rules(sheet)
     except (ValueError, RulesError) as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
@@ -227,6 +327,30 @@ def serve(
 
     typer.echo(f"ShotSheet UI: http://127.0.0.1:{port}")
     uvicorn.run(web_app, host="127.0.0.1", port=port, log_level="info")
+
+
+def _caption_box(value: str | None) -> CaptionBox | None:
+    """Parse ``top,bottom,left,right`` percentages into a planned caption box."""
+    if value is None:
+        return None
+    parts = [part.strip() for part in value.split(",")]
+    if len(parts) != 4:
+        raise typer.BadParameter(
+            "--caption-box needs four comma-separated percentages: top,bottom,left,right"
+        )
+    try:
+        top, bottom, left, right = (float(part) for part in parts)
+    except ValueError as exc:
+        raise typer.BadParameter(f"--caption-box values must be numbers: {value!r}") from exc
+    if not all(0 <= number <= 100 for number in (top, bottom, left, right)):
+        raise typer.BadParameter("--caption-box percentages must stay within 0..100")
+    if top >= bottom or left >= right:
+        raise typer.BadParameter("--caption-box must satisfy top < bottom and left < right")
+    return CaptionBox(top=top, bottom=bottom, left=left, right=right)
+
+
+def _with_caption_box(sheet: ShotSheet, box: CaptionBox) -> ShotSheet:
+    return sheet.model_copy(update={"source": sheet.source.model_copy(update={"caption_box": box})})
 
 
 def _write_sheet(

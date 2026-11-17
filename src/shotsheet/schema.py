@@ -90,6 +90,30 @@ def parse_timecode(timecode: str, fps: float) -> float:
     return total_frames / fps
 
 
+class CaptionBox(BaseModel):
+    """The subtitle band this tool plans to place, in absolute frame percentages.
+
+    This is the rectangle the exporter would use, not a box read from the source
+    video: v0.1 cannot locate text already burned into the picture. The default
+    is a conservative product choice, not a platform specification -- the bottom
+    12% of the frame with 4% side margins, which keeps the platform UI clear on
+    9:16 and 3:4 clips.
+    """
+
+    top: float = Field(default=88.0, ge=0, le=100)
+    bottom: float = Field(default=100.0, ge=0, le=100)
+    left: float = Field(default=4.0, ge=0, le=100)
+    right: float = Field(default=96.0, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _check_rect(self) -> CaptionBox:
+        if self.top >= self.bottom:
+            raise ValueError("caption box must satisfy top < bottom")
+        if self.left >= self.right:
+            raise ValueError("caption box must satisfy left < right")
+        return self
+
+
 class Source(BaseModel):
     """The clip a sheet was derived from."""
 
@@ -97,6 +121,13 @@ class Source(BaseModel):
     duration_ms: int = Field(gt=0, description="Clip duration in milliseconds.")
     fps: float = Field(gt=0, description="Frame rate used for the timecode frame field.")
     platform: Platform
+    caption_box: CaptionBox = Field(
+        default_factory=CaptionBox,
+        description=(
+            "Planned subtitle band as absolute frame percentages, checked against the "
+            "platform's UI margins. Not a box read from the source video."
+        ),
+    )
 
 
 class Caption(BaseModel):
@@ -107,7 +138,10 @@ class Caption(BaseModel):
     out_ms: int = Field(ge=0)
     safe_area_ok: bool | None = Field(
         default=None,
-        description="Whether the caption stays inside the platform safe area; None until checked.",
+        description=(
+            "Whether the planned caption band (source.caption_box) stays inside the platform "
+            "margins; None until checked. It says nothing about text burned into the source."
+        ),
     )
 
     @model_validator(mode="after")

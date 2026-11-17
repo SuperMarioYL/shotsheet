@@ -55,6 +55,15 @@
   }
   .field { display: flex; flex-direction: column; gap: 6px; }
   .field label, .check { color: var(--muted); font-size: 13px; }
+  .field input {
+    font: inherit;
+    width: 280px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    padding: 9px 12px;
+  }
   select, button {
     font: inherit;
     border-radius: 8px;
@@ -122,12 +131,32 @@
   .table-wrap .violation.error, .sheet-violations .violation.error { color: var(--error); }
   .table-wrap .violation.warning, .sheet-violations .violation.warning { color: var(--warning); }
   .table-wrap .ok { color: var(--ok); font-size: 12px; }
+  .table-wrap select.cell {
+    font: inherit;
+    padding: 2px 5px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+  }
+  .table-wrap [contenteditable="true"] {
+    display: inline-block;
+    min-width: 110px;
+    padding: 1px 4px;
+    border-bottom: 1px dashed var(--line);
+    border-radius: 4px;
+    outline: none;
+    color: var(--text);
+  }
+  .table-wrap [contenteditable="true"]:focus { border-color: var(--accent); background: var(--panel-2); }
+  .table-wrap [contenteditable="true"]:empty::before { content: "点击编辑"; color: var(--muted); }
   .sheet-violations { padding: 12px 18px; border: 1px solid var(--line); border-top: 0; background: var(--panel); font-size: 13px; }
   .sheet-violations .violation { margin-bottom: 5px; }
   footer { margin-top: 42px; color: var(--muted); font-size: 12px; }
   @media (max-width: 720px) {
     main { padding: 24px 14px 60px; }
     button { margin-left: 0; width: 100%; }
+    .field input { width: 100%; }
   }
 </style>
 </head>
@@ -137,7 +166,7 @@
     <h1>拉片单 <span>ShotSheet</span></h1>
     <p class="lead">
       拖入一条本地短视频，自动切成镜头，逐镜填景别、机位、运镜、道具与场景，
-      再按抖音 / 小红书 / 视频号的规则标出字幕安全区与开场钩子问题。视频只在本机处理。
+      再按抖音 / 小红书 / 视频号的规则标出计划字幕区与开场钩子问题。视频只在本机处理。
     </p>
   </header>
 
@@ -164,6 +193,10 @@
         <option value="qwen">阿里云百炼（通义千问 VL）</option>
       </select>
     </div>
+    <div class="field">
+      <label for="apiKey">API Key（只保存在本页内存，不写入磁盘）</label>
+      <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴对应 provider 的 Key">
+    </div>
     <label class="check"><input id="vision" type="checkbox" checked> 视觉描述</label>
     <label class="check"><input id="transcribe" type="checkbox"> 转写字幕（首次会下载模型）</label>
     <button id="run" type="button" disabled>开始分析</button>
@@ -184,16 +217,38 @@
 <script>
   const $ = (id) => document.getElementById(id);
   const platformLabels = { douyin: "抖音", xiaohongshu: "小红书", shipinhao: "视频号" };
-  const state = { file: null };
+  const fieldLabels = { shot_size: "景别", camera: "机位", movement: "运镜", props: "道具", scene: "场景" };
+  const state = {
+    file: null,
+    sheet: null,
+    sheetPath: null,
+    providers: [],
+    keyFor: null,
+    lastTableHtml: "",
+  };
 
   const drop = $("drop");
   const fileInput = $("file");
   const runButton = $("run");
   const statusLine = $("status");
+  const providerSelect = $("provider");
+  const keyInput = $("apiKey");
 
   function setStatus(text, kind) {
     statusLine.textContent = text;
     statusLine.className = "status" + (kind ? " " + kind : "");
+  }
+
+  function providerEntry(id) {
+    return state.providers.find((provider) => provider.id === id);
+  }
+
+  function updateKeyHint() {
+    const entry = providerEntry(providerSelect.value);
+    if (!entry) return;
+    keyInput.placeholder = entry.available
+      ? entry.api_key_env + " 已从环境变量读取；也可粘贴新 Key"
+      : "粘贴 " + entry.api_key_env + "（只存在本页内存）";
   }
 
   async function loadConfig() {
@@ -201,21 +256,27 @@
       const response = await fetch("/config");
       if (!response.ok) return;
       const config = await response.json();
-      const select = $("provider");
-      select.innerHTML = "";
-      for (const provider of config.providers) {
+      state.providers = config.providers || [];
+      providerSelect.innerHTML = "";
+      for (const provider of state.providers) {
         const option = document.createElement("option");
         option.value = provider.id;
         option.textContent = provider.label + " · " + provider.model;
-        if (!provider.available) option.textContent += "（未配置 Key）";
+        if (!provider.available) option.textContent += "（未配置环境变量 Key）";
         if (provider.id === config.default_provider) option.selected = true;
-        select.appendChild(option);
+        providerSelect.appendChild(option);
       }
-      const available = config.providers.some((provider) => provider.available);
-      $("vision").checked = available;
-      $("vision").disabled = !available;
-      if (!available) {
-        setStatus("未检测到视觉 API Key：已关闭视觉描述，仍可做镜头切分与字幕。设置 ARK_API_KEY 后刷新即可。");
+      // Only one provider key configured: select it instead of failing on the default.
+      const available = state.providers.filter((provider) => provider.available);
+      if (available.length && !available.some((provider) => provider.id === providerSelect.value)) {
+        providerSelect.value = available[0].id;
+      }
+      $("vision").checked = available.length > 0;
+      updateKeyHint();
+      if (!available.length) {
+        setStatus("未检测到视觉 API Key：可在页面粘贴 Key，或取消勾选视觉描述。");
+      } else if (available.length === 1) {
+        setStatus("只检测到一个 provider 的 Key，已自动选中 " + providerSelect.value + "。");
       }
     } catch (error) {
       setStatus("无法读取服务配置：" + error.message, "error");
@@ -254,6 +315,62 @@
     if (file) selectFile(file);
   });
 
+  keyInput.addEventListener("input", () => {
+    // Bind the pasted key to the provider that is selected right now.
+    state.keyFor = keyInput.value.trim() ? providerSelect.value : null;
+  });
+  providerSelect.addEventListener("change", () => {
+    if (keyInput.value) {
+      keyInput.value = "";
+      state.keyFor = null;
+      setStatus("已切换视觉模型，请重新粘贴对应的 API Key。");
+    }
+    updateKeyHint();
+  });
+
+  function renderNotices(warnings) {
+    const notices = $("notices");
+    notices.innerHTML = "";
+    for (const text of warnings) {
+      const line = document.createElement("p");
+      line.className = "notice warning";
+      line.textContent = text;
+      notices.appendChild(line);
+    }
+  }
+
+  function renderViolations(violations) {
+    const box = $("sheet-violations");
+    const sheetViolations = violations.filter((item) => item.shot_index === null);
+    box.innerHTML = "";
+    if (!sheetViolations.length) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    for (const violation of sheetViolations) {
+      const line = document.createElement("div");
+      line.className = "violation " + violation.severity;
+      line.textContent = "[" + violation.rule_id + "] " + violation.message;
+      box.appendChild(line);
+    }
+  }
+
+  function paint(data) {
+    state.lastTableHtml = data.table_html;
+    renderNotices(data.warnings || []);
+    renderViolations(data.violations || []);
+    // Server-rendered and autoescaped; the print sheet and UI share the markup.
+    $("sheet").innerHTML = data.table_html;
+    if (data.sheet_path) {
+      state.sheetPath = data.sheet_path;
+      const hint = document.createElement("p");
+      hint.className = "notice ok";
+      hint.textContent = "单元格可直接编辑，改动会立即写入 " + data.sheet_path;
+      $("notices").appendChild(hint);
+    }
+  }
+
   function render(data) {
     const sheet = data.sheet;
     $("summary").innerHTML = "";
@@ -262,6 +379,10 @@
       ["平台", platformLabels[sheet.source.platform] || sheet.source.platform],
       ["时长", (sheet.source.duration_ms / 1000).toFixed(2) + "s"],
       ["镜头", sheet.shots.length + " 个"],
+      ["计划字幕区", sheet.source.caption_box
+        ? sheet.source.caption_box.top + "/" + sheet.source.caption_box.bottom + "/" +
+          sheet.source.caption_box.left + "/" + sheet.source.caption_box.right + " %"
+        : "默认"],
       ["规则", sheet.rules || "未应用"],
     ];
     for (const [label, value] of facts) {
@@ -273,38 +394,120 @@
       $("summary").appendChild(item);
     }
 
-    const notices = $("notices");
-    notices.innerHTML = "";
-    for (const warning of data.warnings || []) {
-      const line = document.createElement("p");
-      line.className = "notice warning";
-      line.textContent = warning;
-      notices.appendChild(line);
-    }
-
-    const sheetViolations = (data.violations || []).filter((item) => item.shot_index === null);
-    const box = $("sheet-violations");
-    box.innerHTML = "";
-    if (sheetViolations.length) {
-      box.hidden = false;
-      for (const violation of sheetViolations) {
-        const line = document.createElement("div");
-        line.className = "violation " + violation.severity;
-        line.textContent = "[" + violation.rule_id + "] " + violation.message;
-        box.appendChild(line);
-      }
-    } else {
-      box.hidden = true;
-    }
-
-    // Server-rendered and autoescaped; keeps the printed sheet and UI identical.
-    $("sheet").innerHTML = data.table_html;
+    paint(data);
     $("result").hidden = false;
     $("result").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function cellValue(cell) {
+    const text = cell.textContent.replace(/\u00a0/g, " ").trim();
+    if (cell.dataset.field === "props") {
+      return text ? text.split(/[、,，]/).map((part) => part.trim()).filter(Boolean) : [];
+    }
+    return text || null;
+  }
+
+  async function saveField(index, field, value) {
+    if (!state.sheet) return;
+    const shot = state.sheet.shots[index];
+    if (!shot) return;
+    if (JSON.stringify(shot[field]) === JSON.stringify(value)) return;
+
+    const next = structuredClone(state.sheet);
+    next.shots[index][field] = value;
+    setStatus("保存镜头 #" + (index + 1) + " 的" + (fieldLabels[field] || field) + "…");
+    try {
+      const response = await fetch("/sheet", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || "保存失败（HTTP " + response.status + "）");
+      state.sheet = data.sheet;
+      paint(data);
+      setStatus("已保存镜头 #" + (index + 1) + " 的" + (fieldLabels[field] || field) + "。");
+    } catch (error) {
+      $("sheet").innerHTML = state.lastTableHtml;
+      setStatus("保存失败：" + error.message + "（表格已还原）", "error");
+    }
+  }
+
+  $("sheet").addEventListener("change", (event) => {
+    const select = event.target.closest("select[data-field]");
+    if (!select) return;
+    saveField(Number(select.dataset.shot), select.dataset.field, select.value || null);
+  });
+  $("sheet").addEventListener("focusout", (event) => {
+    const cell = event.target.closest("[contenteditable][data-field]");
+    if (!cell) return;
+    saveField(Number(cell.dataset.shot), cell.dataset.field, cellValue(cell));
+  });
+  $("sheet").addEventListener("keydown", (event) => {
+    const cell = event.target.closest("[contenteditable][data-field]");
+    if (!cell) return;
+    if (event.key === "Enter") {
+      event.preventDefault();
+      cell.blur();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      $("sheet").innerHTML = state.lastTableHtml;
+    }
+  });
+
+  async function consumeStream(body) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finished = null;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let newline;
+      while ((newline = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        if (!line) continue;
+        const event = JSON.parse(line);
+        if (event.type === "stage") {
+          setStatus(event.text);
+        } else if (event.type === "progress") {
+          setStatus("视觉描述：第 " + event.done + " / " + event.total + " 镜完成…");
+        } else if (event.type === "error") {
+          throw new Error(event.detail || "分析失败");
+        } else if (event.type === "done") {
+          finished = event;
+        }
+      }
+    }
+    if (!finished) throw new Error("分析流意外结束。");
+    state.sheet = finished.sheet;
+    render(finished);
+    setStatus("完成。逐镜结果见下表；改动单元格会立即保存。");
+  }
+
   async function run() {
     if (!state.file) return;
+    const provider = providerSelect.value;
+    const key = keyInput.value.trim();
+    const vision = $("vision").checked;
+
+    if (vision && key && state.keyFor !== provider) {
+      setStatus("Key 与所选视觉模型不一致：请重新粘贴，或切换回原来的 provider。", "error");
+      return;
+    }
+    if (vision && !key) {
+      const entry = providerEntry(provider);
+      if (entry && !entry.available) {
+        setStatus(
+          "视觉模型需要 " + entry.api_key_env + "：在页面粘贴 Key、设置环境变量，或取消勾选视觉描述。",
+          "error"
+        );
+        return;
+      }
+    }
+
     runButton.disabled = true;
     setStatus("分析中… 60 秒视频通常需要 40–90 秒，请保持页面打开。", "");
     $("result").hidden = true;
@@ -312,16 +515,19 @@
     const form = new FormData();
     form.append("file", state.file);
     form.append("platform", $("platform").value);
-    form.append("provider", $("provider").value || "doubao");
-    form.append("vision", $("vision").checked ? "true" : "false");
+    form.append("provider", provider);
+    form.append("vision", vision ? "true" : "false");
     form.append("transcribe", $("transcribe").checked ? "true" : "false");
+    form.append("stream", "true");
+    if (key) form.append("api_key", key);
 
     try {
       const response = await fetch("/analyze", { method: "POST", body: form });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || "分析失败（HTTP " + response.status + "）");
-      render(data);
-      setStatus("完成。逐镜结果见下表，规则列标出了越界项。");
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || "分析失败（HTTP " + response.status + "）");
+      }
+      await consumeStream(response.body);
     } catch (error) {
       setStatus("失败：" + error.message, "error");
     } finally {

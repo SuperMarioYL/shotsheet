@@ -1,81 +1,86 @@
 # 中文短视频平台发布规则快照（2026-11）。
 #
-# 口径说明：
-# - 时长上限取平台发布后台/帮助中心公开的常规账号上限；下限 1s 是本工具对
-#   “可成片”短视频的基线，平台未公布硬性最短时长。
-# - 字幕安全区不是平台公布的像素规范，公开资料只有“避开底部信息栏、右侧互动区”
-#   这类百分比口径（见各平台创作者中心与公开运营指南）。因此本文件只写画面百分比，
-#   不写像素，换分辨率不用改。
-# - 常用档位是运营经验值，只触发提示（warning），不是平台硬性限制。
-# - 平台改版时只改这个文件；pipeline/rules.py 不硬编码任何数字。
+# 口径说明（provenance）：
+# - provenance: doc —— 平台公开发布页/规则页给出的口径，仍可能随账号资质变化，
+#   发布时以发布页提示为准。
+# - provenance: heuristic —— 平台没有公布的精确数值，来自社区长期观察和运营经验，
+#   属于本工具的保守估计，不是平台规范。所有这类数值都可以直接在本文件里改。
+#
+# 字幕安全区不是平台公布的像素/百分比规范，公开资料只有“避开底部信息栏、右侧互动区”
+# 这类经验口径，因此整块标为 heuristic。本文件只写画面百分比，不写像素，换分辨率
+# 不用改。pipeline/rules.py 不硬编码任何数字。
 
 version: "2026-11-18"
-
-# 本工具生成字幕的默认位置（距画面四边的百分比）。这是产品选择，不是平台规范：
-# 竖屏底部居中，底部留 25%、右侧留 15%，给播放页 UI 让位。
-subtitle_band_pct:
-  top: 65
-  bottom: 75
-  left: 10
-  right: 85
 
 platforms:
   douyin:
     label: 抖音
-    # 抖音创作者中心（发布规范）：常规账号视频上限 15 分钟，部分账号开放 30 分钟。
-    # https://creator.douyin.com/
-    source: "抖音创作者中心 · 发布规范 https://creator.douyin.com/（常规账号上限 15 分钟）"
+    # 抖音规则中心（公开页，非登录后台）：https://www.douyin.com/rule
+    provenance: doc
+    source: "抖音规则中心（公开）https://www.douyin.com/rule"
     aspect_ratio: "9:16"
     duration_s:
       min: 1
       max: 900
-      # 运营常用档位，不是平台限制。
+      # 运营常用档位，是社区经验值，不是平台限制。
       tiers: [15, 30, 60, 180]
+      tiers_provenance: heuristic
     subtitle_safe_area_pct:
-      # 创作者指南常见区间：底部 20%–25% 为信息栏/文案区，右侧 10%–18% 为互动按钮，
-      # 顶部 8%–10% 为状态栏/标题。这里取各区间的保守端。
+      # 社区观察的经验区间：底部 20%–25% 为信息栏/文案区，右侧 10%–18% 为互动按钮，
+      # 顶部 8%–10% 为状态栏/标题。这里取各区间的保守端。平台未公布精确规范。
+      provenance: heuristic
       top: 10
       bottom: 20
       left: 5
       right: 10
     hook_window_s: 3
+    hook_window_provenance: heuristic
+    hook_window_note: "社区运营经验的 3 秒钩子窗口；平台未公布该阈值。"
 
   xiaohongshu:
     label: 小红书
-    # 小红书创作服务平台（视频发布）：视频上限 15 分钟。
-    # https://creator.xiaohongshu.com/
-    source: "小红书创作服务平台 · 视频发布 https://creator.xiaohongshu.com/（上限 15 分钟）"
+    # 小红书社区公约（公开页，非登录后台）：https://www.xiaohongshu.com/crown/community/agreement
+    provenance: doc
+    source: "小红书社区公约（公开）https://www.xiaohongshu.com/crown/community/agreement"
     aspect_ratio: "3:4"
     duration_s:
       min: 1
       max: 900
-      # 运营常用档位，不是平台限制。
+      # 运营常用档位，是社区经验值，不是平台限制。
       tiers: [15, 30, 60, 180]
+      tiers_provenance: heuristic
     subtitle_safe_area_pct:
-      # 创作者指南常见区间：底部 20%–25% 为标题/描述区，右侧 10%–15% 为点赞收藏按钮，
-      # 顶部 8%–10% 为状态栏。这里取保守端。
+      # 社区观察的经验区间：底部 20%–25% 为标题/描述区，右侧 10%–15% 为点赞收藏按钮，
+      # 顶部 8%–10% 为状态栏。这里取保守端。平台未公布精确规范。
+      provenance: heuristic
       top: 8
       bottom: 20
       left: 5
       right: 10
     hook_window_s: 3
+    hook_window_provenance: heuristic
+    hook_window_note: "社区运营经验的 3 秒钩子窗口；平台未公布该阈值。"
 
   shipinhao:
     label: 视频号
-    # 微信视频号助手（发布规范）：视频上限 30 分钟。
-    # https://channels.weixin.qq.com/
-    source: "微信视频号助手 · 发布规范 https://channels.weixin.qq.com/（上限 30 分钟）"
+    # 微信视频号运营规范（公开页，非登录后台）：https://channels.weixin.qq.com/static/operating-norms.html
+    provenance: doc
+    source: "微信视频号运营规范（公开）https://channels.weixin.qq.com/static/operating-norms.html"
     aspect_ratio: "9:16"
     duration_s:
       min: 1
       max: 1800
-      # 运营常用档位，不是平台限制。
+      # 运营常用档位，是社区经验值，不是平台限制。
       tiers: [15, 30, 60, 180]
+      tiers_provenance: heuristic
     subtitle_safe_area_pct:
-      # 创作者指南常见区间：底部 20%–25% 为描述/评论入口，右侧 12%–15% 为互动按钮，
-      # 顶部 8%–10% 为状态栏。这里取保守端。
+      # 社区观察的经验区间：底部 20%–25% 为描述/评论入口，右侧 12%–15% 为互动按钮，
+      # 顶部 8%–10% 为状态栏。这里取保守端。平台未公布精确规范。
+      provenance: heuristic
       top: 8
       bottom: 20
       left: 5
       right: 12
     hook_window_s: 3
+    hook_window_provenance: heuristic
+    hook_window_note: "社区运营经验的 3 秒钩子窗口；平台未公布该阈值。"

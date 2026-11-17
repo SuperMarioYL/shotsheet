@@ -4,15 +4,19 @@ The rules live in ``rules/cn-platforms.yaml``; this module only loads and
 applies them. Three checks run for the sheet's platform:
 
 - total duration against the platform's published minimum/maximum;
-- the tool's planned subtitle band against the platform's percentage-based
-  safe area (bottom info bar, right interaction rail, top status area);
+- the *planned* subtitle band (``source.caption_box``) against the platform's
+  percentage-based UI margins (bottom info bar, right interaction rail, top
+  status area);
 - the opening hook: the first shot must not run past the platform's hook
   window without a cut.
 
-There is no caption bounding box in the v0.1 contract, so the safe-area
-verdict is a property of the planned subtitle band, applied to every caption.
-It is still reported per shot, and each caption's ``safe_area_ok`` is set, so
-the exported sheet can be audited shot by shot.
+Limitation, stated plainly: v0.1 cannot read the bounding box of text already
+burned into the source video. The safe-area check therefore validates the
+caption rectangle this tool plans to place or export, as recorded in
+``source.caption_box``. It does not prove that the source clip's own captions
+are inside the platform UI. The rule id and message say "planned" for that
+reason, and the verdict is applied to every caption in the sheet so the
+exported sheet can still be audited shot by shot.
 """
 
 from __future__ import annotations
@@ -21,9 +25,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from shotsheet.schema import Platform, Shot, ShotSheet
+from shotsheet.schema import CaptionBox, Platform, Shot, ShotSheet
 
 RULEBOOK_PATH = Path(__file__).resolve().parents[1] / "rules" / "cn-platforms.yaml"
+
+Provenance = Literal["doc", "heuristic"]
+_PROVENANCE_VALUES = {"doc", "heuristic"}
 
 
 class RulesError(RuntimeError):
@@ -35,9 +42,8 @@ class SafeArea:
     """A rectangle in percent.
 
     Platform profiles store margins from each frame edge (top/bottom/left/
-    right); the tool's planned subtitle band stores absolute positions. The
-    parser validates each interpretation, and ``max_y``/``max_x`` convert the
-    margin form to absolute bounds.
+    right). The parser validates the margin interpretation, and ``max_y`` /
+    ``max_x`` convert it to absolute bounds.
     """
 
     top: float
@@ -56,25 +62,29 @@ class SafeArea:
 
 @dataclass(frozen=True)
 class PlatformProfile:
-    """One platform's limits, safe area, and opening-hook window."""
+    """One platform's limits, safe area, opening-hook window, and provenance."""
 
     platform: Platform
     label: str
     source: str
+    provenance: Provenance
     aspect_ratio: str
     min_s: float
     max_s: float
     duration_tiers_s: tuple[float, ...]
+    tiers_provenance: Provenance
     safe_area: SafeArea
+    safe_area_provenance: Provenance
     hook_window_s: float
+    hook_window_provenance: Provenance
+    hook_window_note: str
 
 
 @dataclass(frozen=True)
 class RuleBook:
-    """The full rule file: shared subtitle band plus one profile per platform."""
+    """The full rule file: one profile per platform."""
 
     version: str
-    subtitle_band: SafeArea
     platforms: dict[Platform, PlatformProfile]
 
 
@@ -135,9 +145,6 @@ def load_rulebook(path: str | Path | None = None) -> RuleBook:
 def _parse_rulebook(data: dict, *, source: Path) -> RuleBook:
     try:
         version = str(data["version"])
-        band = _parse_safe_area(
-            data["subtitle_band_pct"], f"{source}: subtitle_band_pct", absolute=True
-        )
         raw_platforms = data["platforms"]
     except KeyError as exc:
         raise RulesError(f"{source} is missing {exc.args[0]!r}") from exc
@@ -156,7 +163,7 @@ def _parse_rulebook(data: dict, *, source: Path) -> RuleBook:
     if missing:
         names = ", ".join(sorted(p.value for p in missing))
         raise RulesError(f"{source} has no profile for: {names}")
-    return RuleBook(version=version, subtitle_band=band, platforms=platforms)
+    return RuleBook(version=version, platforms=platforms)
 
 
 def _parse_profile(platform: Platform, raw: object, where: str) -> PlatformProfile:
@@ -170,6 +177,13 @@ def _parse_profile(platform: Platform, raw: object, where: str) -> PlatformProfi
     except (KeyError, TypeError, ValueError) as exc:
         raise RulesError(f"{where}.duration_s is invalid: {exc}") from exc
 
+    try:
+        safe_raw = raw["subtitle_safe_area_pct"]
+    except KeyError as exc:
+        raise RulesError(f"{where} is missing {exc.args[0]!r}") from exc
+    if not isinstance(safe_raw, dict):
+        raise RulesError(f"{where}.subtitle_safe_area_pct must be a mapping")
+
     if min_s <= 0 or max_s < min_s:
         raise RulesError(f"{where}.duration_s must satisfy 0 < min <= max")
     if not tiers or list(tiers) != sorted(tiers):
@@ -180,12 +194,23 @@ def _parse_profile(platform: Platform, raw: object, where: str) -> PlatformProfi
             platform=platform,
             label=str(raw["label"]),
             source=str(raw["source"]),
+            provenance=_provenance(raw.get("provenance"), f"{where}.provenance"),
             aspect_ratio=str(raw["aspect_ratio"]),
             min_s=min_s,
             max_s=max_s,
             duration_tiers_s=tiers,
-            safe_area=_parse_safe_area(raw["subtitle_safe_area_pct"], where),
+            tiers_provenance=_provenance(
+                duration.get("tiers_provenance"), f"{where}.duration_s.tiers_provenance"
+            ),
+            safe_area=_parse_safe_area(safe_raw, where),
+            safe_area_provenance=_provenance(
+                safe_raw.get("provenance"), f"{where}.subtitle_safe_area_pct.provenance"
+            ),
             hook_window_s=float(raw["hook_window_s"]),
+            hook_window_provenance=_provenance(
+                raw.get("hook_window_provenance"), f"{where}.hook_window_provenance"
+            ),
+            hook_window_note=str(raw["hook_window_note"]),
         )
     except KeyError as exc:
         raise RulesError(f"{where} is missing {exc.args[0]!r}") from exc
@@ -194,9 +219,14 @@ def _parse_profile(platform: Platform, raw: object, where: str) -> PlatformProfi
     return profile
 
 
-def _parse_safe_area(raw: object, where: str, *, absolute: bool = False) -> SafeArea:
-    if not isinstance(raw, dict):
-        raise RulesError(f"{where} must be a mapping")
+def _provenance(value: object, where: str) -> Provenance:
+    text = str(value) if value is not None else ""
+    if text not in _PROVENANCE_VALUES:
+        raise RulesError(f"{where} must be 'doc' or 'heuristic', got {value!r}")
+    return text  # type: ignore[return-value]
+
+
+def _parse_safe_area(raw: dict, where: str) -> SafeArea:
     try:
         area = SafeArea(
             top=float(raw["top"]),
@@ -208,10 +238,7 @@ def _parse_safe_area(raw: object, where: str, *, absolute: bool = False) -> Safe
         raise RulesError(f"{where} must define top/bottom/left/right percentages: {exc}") from exc
     if not all(0 <= value <= 100 for value in (area.top, area.bottom, area.left, area.right)):
         raise RulesError(f"{where} percentages must stay within 0..100")
-    if absolute:
-        if area.top >= area.bottom or area.left >= area.right:
-            raise RulesError(f"{where} must satisfy top < bottom and left < right")
-    elif area.top >= area.max_y or area.left >= area.max_x:
+    if area.top >= area.max_y or area.left >= area.max_x:
         raise RulesError(f"{where} leaves no usable area")
     return area
 
@@ -277,21 +304,27 @@ def apply_platform_rules(sheet: ShotSheet, *, rulebook: RuleBook | None = None) 
                 severity="warning",
                 message=(
                     f"开场镜头 #{first_shot.index + 1} 持续 {first_s:.1f}s，超过"
-                    f"{profile.label}前 {profile.hook_window_s:g}s 钩子窗口；"
+                    f"{profile.label}前 {profile.hook_window_s:g}s 钩子窗口"
+                    f"（{profile.hook_window_provenance} 口径）；"
                     f"建议在前 {profile.hook_window_s:g}s 内切镜、加动作或字幕。"
                 ),
             )
         )
 
-    band_problems = _band_problems(book.subtitle_band, profile.safe_area)
+    box = sheet.source.caption_box
+    box_problems = _caption_box_problems(box, profile.safe_area)
     caption_shots = [shot for shot in sheet.shots if shot.caption is not None]
-    if band_problems:
-        message = "字幕区越过{}安全区：{}".format(profile.label, "；".join(band_problems))
+    if box_problems:
+        message = (
+            "计划字幕区（top {box.top:g}% / bottom {box.bottom:g}% / "
+            "left {box.left:g}% / right {box.right:g}%，来自 source.caption_box）"
+            "越过{label}安全区：{problems}"
+        ).format(box=box, label=profile.label, problems="；".join(box_problems))
         if caption_shots:
             for shot in caption_shots:
                 violations.append(
                     Violation(
-                        rule_id=f"{platform.value}.subtitle_safe_area",
+                        rule_id=f"{platform.value}.planned_caption_safe_area",
                         platform=platform,
                         shot_index=shot.index,
                         severity="error",
@@ -301,7 +334,7 @@ def apply_platform_rules(sheet: ShotSheet, *, rulebook: RuleBook | None = None) 
         else:
             violations.append(
                 Violation(
-                    rule_id=f"{platform.value}.subtitle_safe_area",
+                    rule_id=f"{platform.value}.planned_caption_safe_area",
                     platform=platform,
                     shot_index=None,
                     severity="warning",
@@ -309,9 +342,9 @@ def apply_platform_rules(sheet: ShotSheet, *, rulebook: RuleBook | None = None) 
                 )
             )
 
-    # The safe-area verdict is the same for every caption: the planned band
-    # either fits the platform's UI margins or it does not.
-    safe_area_ok = not band_problems
+    # The verdict is the same for every caption: the planned band either fits
+    # the platform's UI margins or it does not.
+    safe_area_ok = not box_problems
     shots = [
         shot if shot.caption is None else _with_caption_verdict(shot, safe_area_ok=safe_area_ok)
         for shot in sheet.shots
@@ -325,19 +358,19 @@ def apply_platform_rules(sheet: ShotSheet, *, rulebook: RuleBook | None = None) 
     return RuleReport(sheet=checked, profile=profile, violations=tuple(violations))
 
 
-def _band_problems(band: SafeArea, safe: SafeArea) -> list[str]:
+def _caption_box_problems(box: CaptionBox, safe: SafeArea) -> list[str]:
     problems: list[str] = []
-    if band.top < safe.top:
-        problems.append(f"顶部 {band.top:g}% 高于安全区 {safe.top:g}%")
-    if band.bottom > safe.max_y:
+    if box.top < safe.top:
+        problems.append(f"顶部 {box.top:g}% 高于安全区 {safe.top:g}%")
+    if box.bottom > safe.max_y:
         problems.append(
-            f"底部 {band.bottom:g}% 低于安全区 {safe.max_y:g}%（底部 {safe.bottom:g}% 为 UI）"
+            f"底部 {box.bottom:g}% 低于安全区 {safe.max_y:g}%（底部 {safe.bottom:g}% 为 UI）"
         )
-    if band.left < safe.left:
-        problems.append(f"左侧 {band.left:g}% 小于安全区 {safe.left:g}%")
-    if band.right > safe.max_x:
+    if box.left < safe.left:
+        problems.append(f"左侧 {box.left:g}% 小于安全区 {safe.left:g}%")
+    if box.right > safe.max_x:
         problems.append(
-            f"右侧 {band.right:g}% 超过安全区 {safe.max_x:g}%（右侧 {safe.right:g}% 为 UI）"
+            f"右侧 {box.right:g}% 超过安全区 {safe.max_x:g}%（右侧 {safe.right:g}% 为 UI）"
         )
     return problems
 

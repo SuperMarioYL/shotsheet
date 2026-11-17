@@ -17,21 +17,29 @@ answer into the shot. ``httpx`` is imported at call time.
 Without a configured key this module raises :class:`AnalyzeError`; it never
 invents placeholder descriptions. Callers that do not want vision can skip
 :func:`describe_sheet` entirely (the CLI's ``--no-vision`` path).
+
+Model values outside the allowed enums are logged and left empty rather than
+guessed; :func:`vision_coverage` reports how many shots ended up complete so a
+run cannot quietly look successful with missing fields.
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import shutil
 import subprocess
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
 from shotsheet.pipeline.analyze import AnalyzeError
 from shotsheet.schema import Camera, Movement, Shot, ShotSheet, ShotSize, parse_timecode
+
+LOGGER = logging.getLogger(__name__)
 
 MAX_CONCURRENCY = 3
 FRAMES_PER_SHOT = 3
@@ -118,13 +126,15 @@ def describe_sheet(
     provider: str = DEFAULT_PROVIDER,
     api_key: str | None = None,
     concurrency: int = MAX_CONCURRENCY,
+    progress: Callable[[int, int], None] | None = None,
 ) -> ShotSheet:
     """Fill each shot's vision fields from the clip, preserving all other data.
 
     Frames are extracted from ``video_path`` at three points inside every shot.
     The function is all-or-nothing: a missing key, unreadable video, failed
     request, or non-JSON model answer raises :class:`AnalyzeError` rather than
-    leaving a half-described sheet.
+    leaving a half-described sheet. ``progress`` is called as ``(done, total)``
+    after each shot resolves so a caller can show per-shot progress.
     """
     config = get_provider(provider)
     key = api_key or os.environ.get(config.api_key_env)
@@ -167,9 +177,14 @@ def describe_sheet(
                 for shot in sheet.shots
             }
             try:
+                done = 0
+                total = len(futures)
                 for future in as_completed(futures):
                     shot = futures[future]
                     descriptions[shot.index] = future.result()
+                    done += 1
+                    if progress is not None:
+                        progress(done, total)
             except BaseException:
                 for future in futures:
                     future.cancel()
@@ -341,22 +356,54 @@ def _description_from_payload(data: dict, shot_index: int) -> ShotDescription:
     raw_scene = data.get("scene")
     scene = raw_scene.strip()[:120] if isinstance(raw_scene, str) else None
     return ShotDescription(
-        shot_size=_enum_value(ShotSize, data.get("shot_size")),
-        camera=_enum_value(Camera, data.get("camera")),
-        movement=_enum_value(Movement, data.get("movement")),
+        shot_size=_enum_value(ShotSize, data.get("shot_size"), "shot_size", shot_index),
+        camera=_enum_value(Camera, data.get("camera"), "camera", shot_index),
+        movement=_enum_value(Movement, data.get("movement"), "movement", shot_index),
         props=props,
         scene=scene or None,
     )
 
 
-def _enum_value(enum_type, value: object):
+def _enum_value(enum_type, value: object, field: str, shot_index: int):
+    """Normalise one model value, logging anything outside the allowed labels."""
+    if value is None:
+        return None
     if not isinstance(value, str):
+        LOGGER.warning("镜头 #%d 的 %s 返回非字符串 %r，已留空", shot_index + 1, field, value)
         return None
     cleaned = value.strip()
+    if not cleaned:
+        return None
     for member in enum_type:
         if member.value == cleaned:
             return member
+    allowed = "/".join(member.value for member in enum_type)
+    LOGGER.warning(
+        "镜头 #%d 的 %s 返回 %r，不在允许值 %s 内，已留空",
+        shot_index + 1,
+        field,
+        cleaned,
+        allowed,
+    )
     return None
+
+
+def vision_coverage(sheet: ShotSheet) -> tuple[int, int]:
+    """Return ``(shots_with_all_fields, total_shots)`` for the vision pass.
+
+    A shot counts as covered when the three enum fields and the scene sentence
+    are present. ``props`` may legitimately be empty for a shot with no
+    prominent object, so it is not part of the coverage test.
+    """
+    covered = sum(
+        1
+        for shot in sheet.shots
+        if shot.shot_size is not None
+        and shot.camera is not None
+        and shot.movement is not None
+        and bool(shot.scene)
+    )
+    return covered, len(sheet.shots)
 
 
 def _merge_description(shot: Shot, description: ShotDescription) -> Shot:

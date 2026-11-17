@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from jinja2 import Template
 
 from shotsheet.pipeline.rules import Violation
-from shotsheet.schema import ShotSheet
+from shotsheet.schema import Camera, Movement, ShotSheet, ShotSize
 
 _STYLES = """
   @page { size: A4; margin: 14mm; }
@@ -64,6 +64,38 @@ _TABLE = Template(
         <span class="index">#{{ "%02d"|format(shot.index + 1) }}</span>
         <span class="tc">{{ shot.tc_in }} → {{ shot.tc_out }}</span>
         <div class="dur">{{ "%.2f"|format(shot.duration_ms / 1000) }}s</div>
+        {% if editable %}
+        <div class="vision">
+          <select class="cell" data-shot="{{ shot.index }}" data-field="shot_size">
+            <option value="">—</option>
+            {% for size in shot_sizes %}
+            <option
+              value="{{ size.value }}"
+              {% if shot.shot_size == size %}selected{% endif %}>{{ size.value }}</option>
+            {% endfor %}
+          </select> ·
+          <select class="cell" data-shot="{{ shot.index }}" data-field="camera">
+            <option value="">—</option>
+            {% for option in cameras %}
+            <option
+              value="{{ option.value }}"
+              {% if shot.camera == option %}selected{% endif %}>{{ option.value }}</option>
+            {% endfor %}
+          </select> ·
+          <select class="cell" data-shot="{{ shot.index }}" data-field="movement">
+            <option value="">—</option>
+            {% for option in movements %}
+            <option
+              value="{{ option.value }}"
+              {% if shot.movement == option %}selected{% endif %}>{{ option.value }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="props">道具：<span class="cell" contenteditable="true"
+          data-shot="{{ shot.index }}" data-field="props">{{ shot.props|join("、") }}</span></div>
+        <div class="props">场景：<span class="cell" contenteditable="true"
+          data-shot="{{ shot.index }}" data-field="scene">{{ shot.scene or "" }}</span></div>
+        {% else %}
         <div class="vision">
           {{ shot.shot_size.value if shot.shot_size else "—" }} ·
           {{ shot.camera.value if shot.camera else "—" }} ·
@@ -71,6 +103,7 @@ _TABLE = Template(
         </div>
         {% if shot.props %}<div class="props">道具：{{ shot.props|join("、") }}</div>{% endif %}
         {% if shot.scene %}<div class="props">场景：{{ shot.scene }}</div>{% endif %}
+        {% endif %}
       </td>
       <td class="caption">
         {% if shot.caption %}
@@ -134,13 +167,27 @@ _PAGE = Template(
 )
 
 
-def render_shot_table(sheet: ShotSheet, violations: Sequence[Violation] = ()) -> str:
-    """Render just the shot table; used by both the print page and the web UI."""
+def render_shot_table(
+    sheet: ShotSheet, violations: Sequence[Violation] = (), *, editable: bool = False
+) -> str:
+    """Render just the shot table; used by both the print page and the web UI.
+
+    ``editable`` swaps the vision fields for inline controls carrying
+    ``data-shot`` / ``data-field`` attributes; the web page listens for changes
+    and persists them. The printable page keeps plain text.
+    """
     shot_violations: dict[int, list[Violation]] = {}
     for violation in violations:
         if violation.shot_index is not None:
             shot_violations.setdefault(violation.shot_index, []).append(violation)
-    return _TABLE.render(sheet=sheet, shot_violations=shot_violations)
+    return _TABLE.render(
+        sheet=sheet,
+        shot_violations=shot_violations,
+        editable=editable,
+        shot_sizes=list(ShotSize),
+        cameras=list(Camera),
+        movements=list(Movement),
+    )
 
 
 def render_shotlist_html(sheet: ShotSheet, violations: Sequence[Violation] = ()) -> str:
