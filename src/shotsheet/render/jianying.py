@@ -184,6 +184,8 @@ def plan_jianying_draft(sheet: ShotSheet, *, draft_name: str | None = None) -> D
         start_us = _seconds_to_us(parse_timecode(shot.tc_in, sheet.source.fps))
         end_us = _seconds_to_us(parse_timecode(shot.tc_out, sheet.source.fps))
         duration_us = max(1, end_us - start_us)
+        # Timeline positions follow sheet order; source ranges keep the original
+        # in/out points so every cut still points at the right frame.
         video_segments.append(
             PlannedSegment(
                 index=shot.index,
