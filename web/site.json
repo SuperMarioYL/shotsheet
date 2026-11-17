@@ -202,7 +202,7 @@
       "en": "No vision key was used in this run, so shot size, camera, movement, props and scene are empty in the recorded result; the describe pipeline is covered by offline tests with a mocked provider. Vision models also get these fields wrong, which is why every cell is editable and every row keeps its tc_in."
     },
     {
-      "zh": "剪映导出只面向明文 draft_content.json（version 360000 / new_version 75.0.0，5.x/6.x 读取的格式）。剪映 10.1 把时间线存进加密的 draft_info.json，本工具不写也不解密；因此 m3 的「实测导入」与「切点误差 <200 ms」两项验收均为 UNVERIFIED，本次没有在运行中的剪映里导入过。",
+      "zh": "剪映导出只面向明文 draft_content.json（version 360000 / new_version 75.0.0，5.x/6.x 读取的格式）。剪映 10.1 把时间线存进加密的 draft_info.json，本工具不写也不解密；因此「实测导入」与「切点误差 <200 ms」两项验收均为 UNVERIFIED，本次没有在运行中的剪映里导入过。",
       "en": "The Jianying export targets plaintext draft_content.json only (version 360000 / new_version 75.0.0, the format read by 5.x/6.x). Jianying 10.1 stores its timeline in an encrypted draft_info.json, which this tool neither writes nor decrypts; the live-import and per-cut <200 ms acceptance checks are therefore UNVERIFIED, and this export was never imported into a running editor."
     },
     {
@@ -218,8 +218,8 @@
       "en": "The opening-hook window and subtitle safe areas are community-observed heuristics, marked heuristic in the YAML; duration limits come from public platform policy pages, but the publishing page remains authoritative at upload time. A platform change means editing the YAML."
     },
     {
-      "zh": "批量队列、共享模板库、多账号并行和托管上传属于 v0.2 路线，v0.1 没有实现。v0.1 的边界是本地文件进、可拍物料出。",
-      "en": "Batch queues, a shared template library, multi-account parallelism and hosted upload are v0.2 roadmap items, not implemented in v0.1. The v0.1 boundary is local file in, shootable material out."
+      "zh": "v0.1 没有批量队列、共享模板库、多账号并行或托管上传；它的边界是本地文件进、可拍物料出。",
+      "en": "v0.1 has no batch queue, shared template library, multi-account parallelism or hosted upload; its boundary is local file in, shootable material out."
     }
   ],
   "scene": {
