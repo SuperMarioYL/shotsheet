@@ -1,0 +1,124 @@
+{
+  "version": "0.1.0",
+  "recorded_at": "2026-11-18",
+  "environment": {
+    "os": "macOS 27.2 arm64",
+    "python": "3.13 (uv-managed venv; package requires >=3.11)",
+    "ffmpeg": "9.0.2",
+    "jianying": "not installed on the recording machine; no live 剪映 import was performed"
+  },
+  "input": {
+    "kind": "synthetic",
+    "shipped": false,
+    "duration_s": 60.0,
+    "width": 540,
+    "height": 960,
+    "fps": 30,
+    "description": "Twelve 5-second stills with alternating dark/bright backgrounds and a scene label plus timecode, encoded to H.264 and concatenated. No audio track.",
+    "generation": [
+      "magick -size 540x960 xc:#<scene-color> -font Helvetica-Bold -pointsize 58 -gravity center -annotate +0-40 'SCENE NN' -pointsize 30 -annotate +0+40 '00:00:SS:00' frames/sceneNN.png",
+      "ffmpeg -loop 1 -t 5 -i frames/sceneNN.png -vf fps=30,format=yuv420p -c:v libx264 -preset veryfast -crf 20 parts/partNN.mp4",
+      "ffmpeg -f concat -safe 0 -i parts.txt -c copy demo.mp4"
+    ],
+    "note": "The shell loop that ran these commands is build scratch and is not shipped. Alternating luminance guarantees every hard cut is a large content change, so the 12 manual cuts are also the expected detector output."
+  },
+  "commands": [
+    {
+      "command": "uv run shotsheet analyze .builder_demo/demo.mp4 --platform douyin -o .builder_demo/shots.json --html .builder_demo/shots.html",
+      "observed": "12 shots -> shots.json (sheet: shots.html); rules: 1 finding(s), 0 error(s)"
+    },
+    {
+      "command": "uv run shotsheet export .builder_demo/shots.json --jianying-dir .builder_demo/jianying --draft-name demo-teardown --dry-run",
+      "observed": "canvas 1080x1920 (9:16), 00:01:00.000 total; video track: 12 segment(s); text track: 0 segment(s)"
+    },
+    {
+      "command": "uv run shotsheet export .builder_demo/shots.json --jianying-dir .builder_demo/jianying --video .builder_demo/demo.mp4 --draft-name demo-teardown",
+      "observed": "12 video + 0 text segment(s) -> jianying/demo-teardown"
+    }
+  ],
+  "outputs": {
+    "analyze": {
+      "shots": 12,
+      "duration_ms": 60000,
+      "fps": 30.0,
+      "first_shot": {"tc_in": "00:00:00:00", "tc_out": "00:00:05:00", "duration_ms": 5000},
+      "last_shot": {"tc_in": "00:00:55:00", "tc_out": "00:01:00:00", "duration_ms": 5000},
+      "rule_set": "cn-platforms.yaml#douyin",
+      "rule_findings": [
+        {
+          "rule_id": "douyin.hook_window",
+          "severity": "warning",
+          "shot_index": 0,
+          "summary": "首个镜头 5.0s，超过抖音前 3s 钩子窗口（heuristic 口径）"
+        }
+      ],
+      "rule_errors": 0,
+      "html_bytes": 7546,
+      "json_bytes": 3695
+    },
+    "jianying": {
+      "draft_root": ".builder_demo/jianying/",
+      "project_dir": ".builder_demo/jianying/demo-teardown/",
+      "files": [
+        "root_meta_info.json",
+        "demo-teardown/draft_content.json",
+        "demo-teardown/draft_meta_info.json"
+      ],
+      "version": 360000,
+      "new_version": "75.0.0",
+      "canvas": {"width": 1080, "height": 1920, "ratio": "original"},
+      "duration_us": 60000000,
+      "video_segments": 12,
+      "text_segments": 0,
+      "segment_duration_us": 5000000,
+      "source_offsets_us": [0, 5000000, 10000000, 15000000, 20000000, 25000000, 30000000, 35000000, 40000000, 45000000, 50000000, 55000000],
+      "material": {
+        "name": "demo.mp4",
+        "path": "the absolute --video path was embedded in the draft"
+      },
+      "draft_content_bytes": 25004,
+      "draft_meta_info_bytes": 2066,
+      "root_meta_info_bytes": 1162
+    },
+    "gif": {
+      "path": "assets/demo/teardown-60s.gif",
+      "bytes": 1199821,
+      "width": 720,
+      "height": 1280,
+      "duration_s": 16.01,
+      "frames": 128,
+      "description": "A montage built from the real 60s clip, the generated shotlist.html, the actual dry-run output, and the written draft tree. It is an artifact montage assembled with ffmpeg and ImageMagick, not a screen recording.",
+      "composition": [
+        "0.0-2.5s: the synthetic 60s clip played at 24x with a step label",
+        "2.5-5.5s: a crop of the generated shotlist.html (shots 1-7)",
+        "5.5-8.0s: a crop of the same sheet's rule column showing the hook warning",
+        "8.0-11.0s: the actual `export --dry-run` track/segment tree",
+        "11.0-14.0s: the written draft directory tree and JSON header fields",
+        "14.0-16.0s: closing card"
+      ]
+    }
+  },
+  "verification": {
+    "test_suite": "72 tests",
+    "lint": "ruff check . and ruff format --check . pass",
+    "jianying_tests": [
+      "segment count equals shot count",
+      "target/source ranges are microseconds",
+      "caption track and text material counts",
+      "canvas follows the platform aspect ratio",
+      "29.97 fps tc_out converts through the real frame rate",
+      "rerunning the same export produces byte-identical JSON",
+      "no text track when no captions exist",
+      "CLI dry-run writes nothing; CLI export writes the root layout"
+    ]
+  },
+  "limitations": [
+    "剪映专业版 10.1 stores drafts in an encrypted draft_info.json. This exporter writes the plaintext draft_content.json format (version 360000, new_version 75.0.0) used by 剪映专业版 5.x/6.x and does not write or decrypt draft_info.json.",
+    "No running 剪映 installation was available in the recording environment, so the import was not observed. Cut alignment is exact by construction (tc_in/tc_out -> microseconds), but the target editor version and real import behavior remain unverified.",
+    "The draft's material path is the absolute --video path when supplied. Moving the draft folder requires relinking the clip, which is normal for 剪映 drafts.",
+    "The synthetic clip has no audio, so ASR was not run and this recording has no caption text track. Caption segment export is covered by unit tests with hand-authored captions.",
+    "Vision fields are empty because no ARK_API_KEY/DASHSCOPE_API_KEY was used. The describe pipeline is covered by offline tests with a mocked provider.",
+    "The input clip is synthetic; scene detection found exactly 12 cuts because the cuts are high-contrast hard cuts. Real footage may produce a different count, and the tool warns when a clip yields a single shot.",
+    "The GIF is a montage of real artifacts, not a screen recording of the web UI."
+  ]
+}

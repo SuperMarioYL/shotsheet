@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="640" viewBox="0 0 400 640" role="img" aria-labelledby="t d">
+<title id="t">ShotSheet 处理流程</title>
+<desc id="d">拖入视频、切镜转写、逐镜描述、平台校验、导出五阶段纵向流程图。</desc>
+<style>
+  text { font-family: -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+  .flow { stroke-dasharray: 5 8; animation: flow 2.6s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -26; } }
+  .pulse { animation: pulse 3s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: .32; } 50% { opacity: 1; } }
+  .drift { animation: drift 4.2s ease-in-out infinite; }
+  @keyframes drift { 0%, 100% { opacity: .25; } 50% { opacity: .9; } }
+  .travel { animation: travel 7s linear infinite; }
+  @keyframes travel { 0% { transform: translateX(0); } 100% { transform: translateX(700px); } }
+  .spin { transform-box: fill-box; transform-origin: center; animation: spin 30s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .float { animation: float 6s ease-in-out infinite; }
+  @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+  @media (prefers-reduced-motion: reduce) {
+    .flow, .pulse, .drift, .travel, .spin, .float { animation: none !important; }
+  }
+</style>
+<defs>
+  <pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
+    <path d="M34 0H0V34" fill="none" stroke="#1b2a37" stroke-width="1" stroke-opacity=".55"/>
+  </pattern>
+  <radialGradient id="glow" cx="62%" cy="42%" r="68%">
+    <stop offset="0" stop-color="#5eead4" stop-opacity=".20"/>
+    <stop offset=".55" stop-color="#7dd3fc" stop-opacity=".07"/>
+    <stop offset="1" stop-color="#070c12" stop-opacity="0"/>
+  </radialGradient>
+  <filter id="blur" x="-60%" y="-60%" width="220%" height="220%">
+    <feGaussianBlur stdDeviation="7"/>
+  </filter>
+  <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur stdDeviation="2.2"/>
+  </filter>
+</defs>
+<rect width="400" height="640" fill="#070c12"/>
+<rect width="400" height="640" fill="url(#grid)"/>
+<rect width="400" height="640" fill="url(#glow)"/>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8ea3b5"/></marker><text x="24" y="44" font-size="26" font-weight="700" fill="#e8f2f8" text-anchor="start" >处理流程</text><text x="24" y="68" font-size="12" font-weight="400" fill="#8ea3b5" text-anchor="start" >五个阶段，全部在本机完成</text><rect x="24" y="90" width="352" height="88" rx="12" fill="#0e1721" stroke="#263543" stroke-width="1.2" /><circle cx="52" cy="120" r="14" fill="#5eead4" opacity=".16"/><text x="52" y="126" font-size="13" font-weight="700" fill="#5eead4" text-anchor="middle" >1</text><text x="74" y="120" font-size="13.5" font-weight="600" fill="#e8f2f8" text-anchor="start" >拖入本地视频</text><text x="40" y="146" font-size="10.5" font-weight="400" fill="#8ea3b5" text-anchor="start" >mp4 · mov · mkv</text><text x="40" y="166" font-size="10" font-weight="400" fill="#7dd3fc" text-anchor="start" >→ demo.mp4</text><path d="M200 178 V190" fill="none" stroke="#8ea3b5" stroke-width="1.6" class="flow" marker-end="url(#arrow)"/><rect x="24" y="190" width="352" height="88" rx="12" fill="#0e1721" stroke="#263543" stroke-width="1.2" /><circle cx="52" cy="220" r="14" fill="#5eead4" opacity=".16"/><text x="52" y="226" font-size="13" font-weight="700" fill="#5eead4" text-anchor="middle" >2</text><text x="74" y="220" font-size="13.5" font-weight="600" fill="#e8f2f8" text-anchor="start" >切镜 + 转写</text><text x="40" y="246" font-size="10.5" font-weight="400" fill="#8ea3b5" text-anchor="start" >scenedetect · whisper（可选）</text><text x="40" y="266" font-size="10" font-weight="400" fill="#7dd3fc" text-anchor="start" >→ shots.json</text><path d="M200 278 V290" fill="none" stroke="#8ea3b5" stroke-width="1.6" class="flow" marker-end="url(#arrow)"/><rect x="24" y="290" width="352" height="88" rx="12" fill="#0e1721" stroke="#263543" stroke-width="1.2" /><circle cx="52" cy="320" r="14" fill="#5eead4" opacity=".16"/><text x="52" y="326" font-size="13" font-weight="700" fill="#5eead4" text-anchor="middle" >3</text><text x="74" y="320" font-size="13.5" font-weight="600" fill="#e8f2f8" text-anchor="start" >逐镜视觉描述</text><text x="40" y="346" font-size="10.5" font-weight="400" fill="#8ea3b5" text-anchor="start" >豆包 / 通义 VL</text><text x="40" y="366" font-size="10" font-weight="400" fill="#7dd3fc" text-anchor="start" >→ 景别·机位·运镜</text><path d="M200 378 V390" fill="none" stroke="#8ea3b5" stroke-width="1.6" class="flow" marker-end="url(#arrow)"/><rect x="24" y="390" width="352" height="88" rx="12" fill="#0e1721" stroke="#263543" stroke-width="1.2" /><circle cx="52" cy="420" r="14" fill="#5eead4" opacity=".16"/><text x="52" y="426" font-size="13" font-weight="700" fill="#5eead4" text-anchor="middle" >4</text><text x="74" y="420" font-size="13.5" font-weight="600" fill="#e8f2f8" text-anchor="start" >平台规则校验</text><text x="40" y="446" font-size="10.5" font-weight="400" fill="#8ea3b5" text-anchor="start" >抖音 · 小红书 · 视频号</text><text x="40" y="466" font-size="10" font-weight="400" fill="#7dd3fc" text-anchor="start" >→ 时长·钩子·安全区</text><path d="M200 478 V490" fill="none" stroke="#8ea3b5" stroke-width="1.6" class="flow" marker-end="url(#arrow)"/><rect x="24" y="490" width="352" height="88" rx="12" fill="#0e1721" stroke="#263543" stroke-width="1.2" /><circle cx="52" cy="520" r="14" fill="#5eead4" opacity=".16"/><text x="52" y="526" font-size="13" font-weight="700" fill="#5eead4" text-anchor="middle" >5</text><text x="74" y="520" font-size="13.5" font-weight="600" fill="#e8f2f8" text-anchor="start" >导出</text><text x="40" y="546" font-size="10.5" font-weight="400" fill="#8ea3b5" text-anchor="start" >A4 HTML + 剪映 draft</text><text x="40" y="566" font-size="10" font-weight="400" fill="#7dd3fc" text-anchor="start" >→ shotlist + draft</text><text x="200" y="604" font-size="11" font-weight="400" fill="#8ea3b5" text-anchor="middle" >不上传 · 不登录 · 本地运行</text>
+</svg>

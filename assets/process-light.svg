@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="410" viewBox="0 0 980 410" role="img" aria-labelledby="t d">
+<title id="t">ShotSheet 处理流程</title>
+<desc id="d">拖入视频、切镜转写、逐镜描述、平台校验、导出五阶段流程图。</desc>
+<style>
+  text { font-family: -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+  .flow { stroke-dasharray: 5 8; animation: flow 2.6s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -26; } }
+  .pulse { animation: pulse 3s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: .32; } 50% { opacity: 1; } }
+  .drift { animation: drift 4.2s ease-in-out infinite; }
+  @keyframes drift { 0%, 100% { opacity: .25; } 50% { opacity: .9; } }
+  .travel { animation: travel 7s linear infinite; }
+  @keyframes travel { 0% { transform: translateX(0); } 100% { transform: translateX(700px); } }
+  .spin { transform-box: fill-box; transform-origin: center; animation: spin 30s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .float { animation: float 6s ease-in-out infinite; }
+  @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+  @media (prefers-reduced-motion: reduce) {
+    .flow, .pulse, .drift, .travel, .spin, .float { animation: none !important; }
+  }
+</style>
+<defs>
+  <pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
+    <path d="M34 0H0V34" fill="none" stroke="#dde8ef" stroke-width="1" stroke-opacity=".55"/>
+  </pattern>
+  <radialGradient id="glow" cx="62%" cy="42%" r="68%">
+    <stop offset="0" stop-color="#0f766e" stop-opacity=".20"/>
+    <stop offset=".55" stop-color="#0369a1" stop-opacity=".07"/>
+    <stop offset="1" stop-color="#f7fafc" stop-opacity="0"/>
+  </radialGradient>
+  <filter id="blur" x="-60%" y="-60%" width="220%" height="220%">
+    <feGaussianBlur stdDeviation="7"/>
+  </filter>
+  <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur stdDeviation="2.2"/>
+  </filter>
+</defs>
+<rect width="980" height="410" fill="#f7fafc"/>
+<rect width="980" height="410" fill="url(#grid)"/>
+<rect width="980" height="410" fill="url(#glow)"/>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#516a7d"/></marker><text x="40" y="46" font-size="20" font-weight="700" fill="#0c1a25" text-anchor="start" >从一条对标片到可拍的物料</text><text x="40" y="70" font-size="12" font-weight="400" fill="#516a7d" text-anchor="start" >五个阶段都在本机完成；每段都产出可检查的文件。</text><rect x="30" y="110" width="168" height="220" rx="12" fill="#ffffff" stroke="#c9d9e4" stroke-width="1.2" /><circle cx="60" cy="144" r="16" fill="#0f766e" opacity=".16"/><text x="60" y="150" font-size="15" font-weight="700" fill="#0f766e" text-anchor="middle" >1</text><text x="84" y="150" font-size="13.5" font-weight="600" fill="#0c1a25" text-anchor="start" >拖入本地视频</text><text x="46" y="184" font-size="10.5" font-weight="400" fill="#516a7d" text-anchor="start" >mp4 · mov · mkv</text><text x="46" y="206" font-size="10.5" font-weight="400" fill="#516a7d" text-anchor="start" >只吃本地文件</text><rect x="44" y="282" width="140" height="32" rx="7" fill="#edf4f8" stroke="#c9d9e4" stroke-width="1" /><text x="114" y="302" font-size="10" font-weight="400" fill="#0369a1" text-anchor="middle" >demo.mp4</text><rect x="218" y="110" width="168" height="220" rx="12" fill="#ffffff" stroke="#c9d9e4" stroke-width="1.2" /><circle cx="248" cy="144" r="16" fill="#0f766e" opacity=".16"/><text x="248" y="150" font-size="15" font-weight="700" fill="#0f766e" text-anchor="middle" >2</text><text x="272" y="150" font-size="13.5" font-weight="600" fill="#0c1a25" text-anchor="start" >切镜 + 转写</text><text x="234" y="184" font-size="10.5" font-weight="400" fill="#516a7d" text-anchor="start" >scenedetect</text><text x="234" y="206" font-size="10.5" font-weight="400" fill="#516a7d" text-anchor="start" >faster-whisper 可选</text><rect x="232" y="282" width="140" height="32" rx="7" fill="#edf4f8" stroke="#c9d9e4" stroke-width="1" /><text x="302" y="302" font-size="10" font-weight="400" fill="#0369a1" text-anchor="middle" >shots.json</text><rect x="406" y="110" width="168" height="220" rx="12" fill="#ffffff" stroke="#c9d9e4" stroke-width="1.2" /><circle cx="436" cy="144" r="16" fill="#0f766e" opacity=".16"/><text x="436" y="150" font-size="15" font-weight="700" fill="#0f766e" text-anchor="middle" >3</text><text x="460" y="150" font-size="13.5" font-weight="600" fill="#0c1a25" text-anchor="start" >逐镜视觉描述</text><text x="422" y="184" font-size="10.5" font-weight="400" fill="#516a7d" text-anchor="start" >豆包 · 通义 VL</text><text x="422" y="206" font-size="10.5" font-weight="400" fill="#516a7d" text-anchor="start" >景别/机位/运镜/道具</text><rect x="420" y="282" width="140" height="32" rx="7" fill="#edf4f8" stroke="#c9d9e4" stroke-width="1" /><text x="490" y="302" font-size="10" font-weight="400" fill="#0369a1" text-anchor="middle" >逐镜字段</text><rect x="594" y="110" width="168" height="220" rx="12" fill="#ffffff" stroke="#c9d9e4" stroke-width="1.2" /><circle cx="624" cy="144" r="16" fill="#0f766e" opacity=".16"/><text x="624" y="150" font-size="15" font-weight="700" fill="#0f766e" text-anchor="middle" >4</text><text x="648" y="150" font-size="13.5" font-weight="600" fill="#0c1a25" text-anchor="start" >平台规则校验</text><text x="610" y="184" font-size="10.5" font-weight="400" fill="#516a7d" text-anchor="start" >抖音 · 小红书 · 视频号</text><text x="610" y="206" font-size="10.5" font-weight="400" fill="#516a7d" text-anchor="start" >时长/钩子/安全区</text><rect x="608" y="282" width="140" height="32" rx="7" fill="#edf4f8" stroke="#c9d9e4" stroke-width="1" /><text x="678" y="302" font-size="10" font-weight="400" fill="#0369a1" text-anchor="middle" >findings</text><rect x="782" y="110" width="168" height="220" rx="12" fill="#ffffff" stroke="#c9d9e4" stroke-width="1.2" /><circle cx="812" cy="144" r="16" fill="#0f766e" opacity=".16"/><text x="812" y="150" font-size="15" font-weight="700" fill="#0f766e" text-anchor="middle" >5</text><text x="836" y="150" font-size="13.5" font-weight="600" fill="#0c1a25" text-anchor="start" >导出</text><text x="798" y="184" font-size="10.5" font-weight="400" fill="#516a7d" text-anchor="start" >A4 分镜表 HTML</text><text x="798" y="206" font-size="10.5" font-weight="400" fill="#516a7d" text-anchor="start" >剪映 draft 目录</text><rect x="796" y="282" width="140" height="32" rx="7" fill="#edf4f8" stroke="#c9d9e4" stroke-width="1" /><text x="866" y="302" font-size="10" font-weight="400" fill="#0369a1" text-anchor="middle" >shotlist + draft</text><path d="M198 220 H214" fill="none" stroke="#516a7d" stroke-width="1.6" class="flow" marker-end="url(#arrow)"/><path d="M386 220 H402" fill="none" stroke="#516a7d" stroke-width="1.6" class="flow" marker-end="url(#arrow)"/><path d="M574 220 H590" fill="none" stroke="#516a7d" stroke-width="1.6" class="flow" marker-end="url(#arrow)"/><path d="M762 220 H778" fill="none" stroke="#516a7d" stroke-width="1.6" class="flow" marker-end="url(#arrow)"/><circle cx="30" cy="352" r="4" fill="#0f766e" class="travel"><animate attributeName="opacity" values=".5;1;.5" dur="3s" repeatCount="indefinite"/></circle><path d="M30 352 H940" stroke="#c9d9e4" stroke-width="1" stroke-dasharray="2 8"/><text x="40" y="382" font-size="12" font-weight="400" fill="#516a7d" text-anchor="start" >本地单机 · 不上传视频 · 不需要登录</text><text x="700" y="382" font-size="12" font-weight="400" fill="#0f766e" text-anchor="start" >v0.1 本地版免费开源</text>
+</svg>
