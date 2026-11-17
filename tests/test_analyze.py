@@ -1,7 +1,8 @@
-"""Tests for shot analysis, the sheet contract, and the CLI wiring.
+"""Tests for shot analysis, the sheet contract, the HTML sheet, and the CLI wiring.
 
-The video-dependent tests build a tiny three-cut clip with ffmpeg and are skipped
-when ffmpeg is not installed; the schema and caption tests always run.
+The video-dependent tests build tiny clips with ffmpeg and are skipped when
+ffmpeg is not installed; the schema, caption, transcribe, and renderer tests
+always run.
 """
 
 from __future__ import annotations
@@ -17,8 +18,23 @@ from typer.testing import CliRunner
 
 from shotsheet import __version__
 from shotsheet.cli import app
-from shotsheet.pipeline.analyze import CaptionSegment, analyze_video, attach_captions
-from shotsheet.schema import Caption, Platform, Shot, ShotSheet, Source, parse_timecode
+from shotsheet.pipeline.analyze import (
+    AnalyzeError,
+    CaptionSegment,
+    analyze_video,
+    attach_captions,
+    transcribe_video,
+)
+from shotsheet.render.shotlist_html import render_shotlist_html
+from shotsheet.schema import (
+    Caption,
+    Platform,
+    Shot,
+    ShotSheet,
+    Source,
+    format_timecode,
+    parse_timecode,
+)
 
 
 def _sample_sheet() -> ShotSheet:
@@ -66,6 +82,78 @@ def test_attach_captions_clamps_to_each_shot() -> None:
     assert captioned[1].caption == Caption(text="第二句片尾", in_ms=2000, out_ms=4000)
 
 
+def test_timecode_frame_count_matches_real_duration() -> None:
+    fps = 30000 / 1001
+
+    assert format_timecode(180, fps) == "00:00:06:00"
+    # Frame 180 happens 6.006 s into a 29.97 fps clip, so the timecode must
+    # parse back to 6006 ms rather than 6000 ms.
+    assert parse_timecode("00:00:06:00", fps) * 1000 == pytest.approx(6006, abs=1)
+    assert format_timecode(1800, fps) == "00:01:00:00"
+    for frame_num in range(0, 1800, 7):
+        timecode = format_timecode(frame_num, fps)
+        assert parse_timecode(timecode, fps) == pytest.approx(frame_num / fps)
+
+
+def test_render_shotlist_html_has_only_timeline_and_caption_columns() -> None:
+    html = render_shotlist_html(_sample_sheet())
+
+    assert html.count("</th>") == 2
+    assert "时间码 / 镜头" in html
+    assert "字幕" in html
+    assert "00:00:00:00 → 00:00:02:00" in html
+    assert "开场就在厨房" in html
+    assert html.count("<tr>") == 3
+
+
+class _FakeSegment:
+    start = 0.0
+    end = 6.0
+    text = "三镜头"
+
+
+def test_transcribe_wiring_attaches_captions(
+    synthetic_clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import faster_whisper
+
+    seen: dict[str, object] = {}
+
+    class FakeModel:
+        def __init__(self, model_size: str, device: str, compute_type: str) -> None:
+            seen["model_size"] = model_size
+            seen["device"] = device
+            seen["compute_type"] = compute_type
+
+        def transcribe(self, audio: str, language: str | None = None) -> tuple:
+            seen["audio"] = audio
+            seen["language"] = language
+            return iter([_FakeSegment()]), object()
+
+    monkeypatch.setattr(faster_whisper, "WhisperModel", FakeModel)
+
+    sheet = analyze_video(synthetic_clip, transcribe=True, asr_model="tiny", language="zh")
+
+    assert seen["model_size"] == "tiny"
+    assert seen["language"] == "zh"
+    assert str(seen["audio"]).endswith(synthetic_clip.name)
+    assert all(shot.caption is not None for shot in sheet.shots)
+    assert all(shot.caption.text == "三镜头" for shot in sheet.shots)
+
+
+def test_transcribe_errors_become_analyze_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    import faster_whisper
+
+    class BrokenModel:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            raise TypeError("open() got an unexpected keyword argument 'metadata_errors'")
+
+    monkeypatch.setattr(faster_whisper, "WhisperModel", BrokenModel)
+
+    with pytest.raises(AnalyzeError, match="transcription failed.*metadata_errors"):
+        transcribe_video(Path("clip.mp4"), model_size="tiny")
+
+
 @pytest.fixture(scope="module")
 def synthetic_clip(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """A six-second clip made of three two-second solid-colour shots."""
@@ -86,6 +174,66 @@ def synthetic_clip(tmp_path_factory: pytest.TempPathFactory) -> Path:
             *sources,
             "-filter_complex",
             "[0:v][1:v][2:v]concat=n=3:v=1:a=0",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return output
+
+
+@pytest.fixture(scope="module")
+def solid_clip(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A four-second single-colour clip: scene detection cannot find a cut."""
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        pytest.skip("ffmpeg is not installed")
+
+    output = tmp_path_factory.mktemp("solid") / "solid.mp4"
+    subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=160x120:r=30:d=4",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return output
+
+
+@pytest.fixture(scope="module")
+def clip_2997(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A two-second 29.97 fps clip, where nominal-30 timecodes drift from real time."""
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        pytest.skip("ffmpeg is not installed")
+
+    output = tmp_path_factory.mktemp("clip2997") / "clip2997.mp4"
+    subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=160x120:r=30000/1001:d=2",
             "-c:v",
             "libx264",
             "-pix_fmt",
@@ -124,6 +272,23 @@ def test_analyze_finds_contiguous_monotonic_shots(synthetic_clip: Path) -> None:
     assert restored == sheet
 
 
+def test_single_shot_clip_warns_instead_of_failing(solid_clip: Path) -> None:
+    with pytest.warns(UserWarning, match="found 1 shot"):
+        sheet = analyze_video(solid_clip)
+
+    assert len(sheet.shots) == 1
+
+
+def test_2997_fps_tc_out_matches_source_duration(clip_2997: Path) -> None:
+    sheet = analyze_video(clip_2997)
+    fps = sheet.source.fps
+    last = sheet.shots[-1]
+
+    assert fps == pytest.approx(30000 / 1001)
+    assert last.tc_out == "00:00:02:00"
+    assert parse_timecode(last.tc_out, fps) * 1000 == pytest.approx(sheet.source.duration_ms, abs=1)
+
+
 def test_cli_version() -> None:
     result = CliRunner().invoke(app, ["--version"])
 
@@ -131,8 +296,9 @@ def test_cli_version() -> None:
     assert result.output.strip() == f"shotsheet {__version__}"
 
 
-def test_cli_analyze_writes_json(synthetic_clip: Path) -> None:
+def test_cli_analyze_writes_json_and_html(synthetic_clip: Path) -> None:
     output = synthetic_clip.parent / "shots.json"
+    html_path = output.with_suffix(".html")
 
     result = CliRunner().invoke(
         app, ["analyze", str(synthetic_clip), "-o", str(output), "--platform", "douyin"]
@@ -143,3 +309,21 @@ def test_cli_analyze_writes_json(synthetic_clip: Path) -> None:
     assert payload["schema_version"] == 1
     assert payload["source"]["platform"] == "douyin"
     assert len(payload["shots"]) >= 2
+
+    html = html_path.read_text(encoding="utf-8")
+    assert html.count("</th>") == 2
+    assert payload["shots"][0]["tc_in"] in html
+
+
+def test_cli_rejects_non_video_input(tmp_path: Path) -> None:
+    not_a_video = tmp_path / "notes.txt"
+    not_a_video.write_text("not a video", encoding="utf-8")
+    output = tmp_path / "shots.json"
+
+    result = CliRunner().invoke(app, ["analyze", str(not_a_video), "-o", str(output)])
+
+    assert result.exit_code == 1
+    message = result.output + result.stderr
+    assert "error: could not open" in message
+    assert "Traceback" not in message
+    assert not output.exists()

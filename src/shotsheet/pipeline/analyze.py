@@ -7,6 +7,7 @@ Each missing piece is reported only when the feature that needs it is requested.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +24,10 @@ from shotsheet.schema import (
 )
 
 DEFAULT_ASR_MODEL = "small"
+
+# A clip longer than this that yields one shot is more likely a detection miss
+# (uniform footage, fast cuts under the default threshold) than a single take.
+_SINGLE_SHOT_WARNING_MS = 3000
 
 
 class AnalyzeError(RuntimeError):
@@ -66,6 +71,7 @@ def analyze_video(
         raise AnalyzeError(f"video file not found: {path}")
 
     scenes, fps = _detect_scenes(path)
+    duration_ms = max(1, round(scenes[-1].end_frame * 1000 / fps))
     shots = [
         Shot(
             index=index,
@@ -75,6 +81,13 @@ def analyze_video(
         )
         for index, scene in enumerate(scenes)
     ]
+    if len(shots) <= 1 and duration_ms > _SINGLE_SHOT_WARNING_MS:
+        warnings.warn(
+            f"scene detection found {len(shots)} shot in {duration_ms} ms of {path.name}; "
+            "the clip may be one continuous take, or the detector missed cuts",
+            UserWarning,
+            stacklevel=2,
+        )
 
     if transcribe:
         segments = transcribe_video(path, model_size=asr_model, language=language)
@@ -83,7 +96,7 @@ def analyze_video(
     return ShotSheet(
         source=Source(
             file=path.name,
-            duration_ms=max(1, round(scenes[-1].end_frame * 1000 / fps)),
+            duration_ms=duration_ms,
             fps=fps,
             platform=platform,
         ),
@@ -105,12 +118,21 @@ def transcribe_video(
             "ASR captions need the 'faster-whisper' package (pip install faster-whisper)"
         ) from exc
 
-    model = WhisperModel(model_size, device="auto", compute_type="int8")
-    segments, _info = model.transcribe(str(video_path), language=language)
-    return [
-        CaptionSegment(start_s=float(segment.start), end_s=float(segment.end), text=segment.text)
-        for segment in segments
-    ]
+    try:
+        model = WhisperModel(model_size, device="auto", compute_type="int8")
+        segments, _info = model.transcribe(str(video_path), language=language)
+        return [
+            CaptionSegment(
+                start_s=float(segment.start), end_s=float(segment.end), text=segment.text
+            )
+            for segment in segments
+        ]
+    except Exception as exc:
+        raise AnalyzeError(
+            f"transcription failed for {Path(video_path).name}: {exc}. "
+            "Check the audio track is readable, retry without --transcribe, "
+            "or reinstall the 'faster-whisper' and 'av' dependencies."
+        ) from exc
 
 
 def attach_captions(
@@ -148,14 +170,21 @@ def attach_captions(
 
 def _detect_scenes(path: Path) -> tuple[list[_Scene], float]:
     try:
-        from scenedetect import FrameTimecode, SceneManager, open_video
+        from scenedetect import FrameTimecode, SceneManager, VideoOpenFailure, open_video
         from scenedetect.detectors import ContentDetector
     except ImportError as exc:
         raise AnalyzeError(
             "scene detection needs the 'scenedetect' package (pip install scenedetect)"
         ) from exc
 
-    video = open_video(str(path))
+    try:
+        video = open_video(str(path))
+    except VideoOpenFailure as exc:
+        raise AnalyzeError(
+            f"could not open {path.name} as a video ({str(exc).strip()}). "
+            "Pass a readable local video file; v0.1 does not accept platform URLs."
+        ) from exc
+
     try:
         fps = _frame_rate(video)
         manager = SceneManager()
@@ -163,6 +192,8 @@ def _detect_scenes(path: Path) -> tuple[list[_Scene], float]:
         manager.detect_scenes(video, show_progress=False)
         scenes = manager.get_scene_list(start_in_scene=True)
         total_frames = _frame_num(video.duration)
+    except VideoOpenFailure as exc:
+        raise AnalyzeError(f"could not decode {path.name} as a video ({str(exc).strip()})") from exc
     finally:
         video.close()
 

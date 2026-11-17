@@ -59,25 +59,35 @@ class Movement(StrEnum):
 
 
 def format_timecode(frame_num: int, fps: float) -> str:
-    """Format a frame number as ``HH:MM:SS:FF``.
+    """Format a frame number as non-drop-frame ``HH:MM:SS:FF``.
 
-    The frame field counts against the rounded frame rate, which keeps the string
-    readable for both 25/30 and 29.97/59.94 sources.
+    The minutes and seconds count nominally (``round(fps)`` frames per second)
+    and the frame field is the remainder, which is how NDF timecode is written.
+    A 29.97 fps clip therefore reads ``00:00:06:00`` at frame 180 even though
+    that frame happens 6.006 s into the source; ``parse_timecode`` converts the
+    frame count back to real seconds.
     """
-    frames_per_second = max(1, round(fps))
-    whole_seconds, frames = divmod(frame_num, frames_per_second)
+    whole_seconds, frames = divmod(frame_num, max(1, round(fps)))
     hours, remainder = divmod(whole_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
 
 
 def parse_timecode(timecode: str, fps: float) -> float:
-    """Return ``HH:MM:SS:FF`` as seconds, interpreting the frame field with ``fps``."""
+    """Return ``HH:MM:SS:FF`` as real seconds.
+
+    The fields count nominal frames, so at 29.97 fps ``00:00:06:00`` is frame
+    180 at 6.006 s, not 6.000 s. Dividing the frame count by the real rate keeps
+    the timecode consistent with ``source.duration_ms`` instead of drifting a
+    few milliseconds per nominal second.
+    """
     match = _TIMECODE_RE.match(timecode)
     if match is None:
         raise ValueError(f"invalid timecode: {timecode!r}")
     hours, minutes, seconds, frames = (int(part) for part in match.groups())
-    return hours * 3600 + minutes * 60 + seconds + frames / fps
+    nominal_fps = max(1, round(fps))
+    total_frames = (hours * 3600 + minutes * 60 + seconds) * nominal_fps + frames
+    return total_frames / fps
 
 
 class Source(BaseModel):

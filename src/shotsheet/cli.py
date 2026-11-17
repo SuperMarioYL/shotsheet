@@ -9,6 +9,7 @@ import typer
 
 from shotsheet import __version__
 from shotsheet.pipeline.analyze import DEFAULT_ASR_MODEL, AnalyzeError, analyze_video
+from shotsheet.render.shotlist_html import render_shotlist_html
 from shotsheet.schema import Platform
 
 app = typer.Typer(add_completion=False, help="Shot-level teardown for short-form video.")
@@ -45,6 +46,13 @@ def analyze(
     output: Annotated[
         Path, typer.Option("--output", "-o", help="Where to write the shot sheet JSON.")
     ] = Path("shots.json"),
+    html: Annotated[
+        Path | None,
+        typer.Option(
+            "--html",
+            help="Where to write the printable HTML sheet; defaults to the JSON path with .html.",
+        ),
+    ] = None,
     platform: Annotated[
         Platform, typer.Option("--platform", help="Platform whose rules the sheet targets.")
     ] = Platform.DOUYIN,
@@ -61,7 +69,7 @@ def analyze(
         typer.Option("--language", help="Spoken language, e.g. zh; auto-detect when omitted."),
     ] = None,
 ) -> None:
-    """Detect shot boundaries in VIDEO and write shots.json."""
+    """Detect shot boundaries in VIDEO and write shots.json plus a printable sheet."""
     try:
         sheet = analyze_video(
             video,
@@ -74,6 +82,9 @@ def analyze(
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
 
+    html_path = html or output.with_suffix(".html")
     output.parent.mkdir(parents=True, exist_ok=True)
+    html_path.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(sheet.model_dump_json(indent=2) + "\n", encoding="utf-8")
-    typer.echo(f"{len(sheet.shots)} shots -> {output}")
+    html_path.write_text(render_shotlist_html(sheet), encoding="utf-8")
+    typer.echo(f"{len(sheet.shots)} shots -> {output} (sheet: {html_path})")
