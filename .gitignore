@@ -30,3 +30,8 @@ htmlcov/
 # Tooling
 .claude/
 CLAUDE.md
+BUILD_SETUP_NEXT_STEPS.md
+.spawn.*
+.builder_*
+.build_metadata*
+.stage_*
