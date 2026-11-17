@@ -23,6 +23,11 @@ Layout
 
 Copy ``<draft_name>`` into 剪映's ``com.lveditor.draft`` directory and merge the
 ``all_draft_store`` entry into that directory's own ``root_meta_info.json``.
+When the output root already has a ``root_meta_info.json`` this exporter
+merges the new entry by draft id instead of replacing the file, so pointing
+``--jianying-dir`` at a real editor folder does not delete other projects. An
+existing project folder that holds a different draft id is left untouched and
+the export fails, asking for another ``--draft-name``.
 
 Timing is microseconds throughout, as real drafts store it. ``Shot.tc_in`` /
 ``tc_out`` are converted through ``schema.parse_timecode`` so the frame field
@@ -141,13 +146,14 @@ def export_jianying_draft(
         project_dir=project_dir,
     )
 
-    project_dir.mkdir(parents=True, exist_ok=True)
     content_path = project_dir / "draft_content.json"
     meta_path = project_dir / "draft_meta_info.json"
     root_meta_path = root / "root_meta_info.json"
+    _guard_existing_draft(content_path, draft_id, project_dir)
+    project_dir.mkdir(parents=True, exist_ok=True)
     _write_json(content_path, content)
     _write_json(meta_path, meta)
-    _write_json(root_meta_path, root_meta)
+    _register_root_meta(root_meta_path, root_meta)
 
     return JianyingExport(
         root=root,
@@ -732,6 +738,65 @@ def _format_us(value: int) -> str:
     hours, remainder = divmod(seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}.{micros // 1000:03d}"
+
+
+def _guard_existing_draft(content_path: Path, draft_id: str, project_dir: Path) -> None:
+    """Refuse to overwrite a draft folder that belongs to a different sheet."""
+    if not content_path.is_file():
+        return
+    try:
+        existing = json.loads(content_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"refusing to overwrite unreadable {content_path}: {exc}") from exc
+    existing_id = existing.get("id") if isinstance(existing, dict) else None
+    if existing_id != draft_id:
+        raise ValueError(
+            f"{project_dir} already contains a different draft; choose another --draft-name"
+        )
+
+
+def _register_root_meta(path: Path, payload: dict[str, object]) -> None:
+    """Merge the new draft into an existing root_meta_info.json.
+
+    ``--jianying-dir`` may point at a real 剪映 draft root. Replacing that file
+    would delete every other project from the editor's draft list, so new
+    entries are merged by draft id and unknown fields are preserved.
+    """
+    store = payload.get("all_draft_store")
+    entry = store[0] if isinstance(store, list) and store else None
+    if not isinstance(entry, dict):
+        raise ValueError("draft plan is missing its root_meta_info entry")
+    draft_id = entry.get("draft_id")
+    if not isinstance(draft_id, str):
+        raise ValueError("draft plan is missing its draft id")
+
+    if path.is_file():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"refusing to overwrite unreadable {path}: {exc}") from exc
+        if not isinstance(existing, dict):
+            raise ValueError(f"refusing to overwrite {path}: not a JSON object")
+        entries = existing.get("all_draft_store")
+        if not isinstance(entries, list):
+            entries = []
+        for index, item in enumerate(entries):
+            if isinstance(item, dict) and item.get("draft_id") == draft_id:
+                entries[index] = entry
+                break
+        else:
+            entries.append(entry)
+        existing["all_draft_store"] = entries
+        ids = existing.get("draft_ids")
+        if not isinstance(ids, list):
+            ids = []
+        if draft_id not in ids:
+            ids.append(draft_id)
+        existing["draft_ids"] = ids
+        if "root_path" not in existing:
+            existing["root_path"] = payload.get("root_path")
+        payload = existing
+    _write_json(path, payload)
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:

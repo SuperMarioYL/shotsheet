@@ -182,6 +182,42 @@ def test_video_path_is_embedded_as_material_path(tmp_path: Path) -> None:
     )
 
 
+def test_export_merges_an_existing_root_meta(tmp_path: Path) -> None:
+    root_meta = tmp_path / "root_meta_info.json"
+    root_meta.write_text(
+        json.dumps(
+            {
+                "all_draft_store": [{"draft_id": "other", "draft_name": "other"}],
+                "draft_ids": ["other"],
+                "root_path": "/keep/this",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = export_jianying_draft(_sheet(), tmp_path, draft_name="demo")
+
+    data = _load(root_meta)
+    ids = [entry["draft_id"] for entry in data["all_draft_store"]]
+    assert ids == ["other", _load(result.content_path)["id"]]
+    assert data["draft_ids"] == ids
+    assert data["root_path"] == "/keep/this"
+
+
+def test_export_refuses_to_replace_a_different_draft_folder(tmp_path: Path) -> None:
+    export_jianying_draft(_sheet(), tmp_path, draft_name="demo")
+    content_path = tmp_path / "demo" / "draft_content.json"
+    original_id = _load(content_path)["id"]
+    other = _sheet().model_copy(
+        update={"source": _sheet().source.model_copy(update={"file": "other.mp4"})}
+    )
+
+    with pytest.raises(ValueError, match="different draft"):
+        export_jianying_draft(other, tmp_path, draft_name="demo")
+
+    assert _load(content_path)["id"] == original_id
+
+
 @pytest.mark.parametrize("name", ["../escape", "nested/name", "..", "  "])
 def test_draft_name_must_be_a_single_folder(name: str) -> None:
     with pytest.raises(ValueError):

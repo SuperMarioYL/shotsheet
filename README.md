@@ -175,7 +175,7 @@ jianying/
    └─ draft_meta_info.json
 ```
 
-把 `<draft-name>` 目录复制进剪映的 `com.lveditor.draft` 目录，并把 `root_meta_info.json` 里的 `all_draft_store` 条目合并进该目录的同名文件，即可注册工程。草稿里每个镜头一段，`target_timerange` 与 `source_timerange` 都以微秒记录；没有字幕时只有视频轨，有 ASR 字幕时追加一条文字轨，并按计划字幕区放置。
+把 `<draft-name>` 目录复制进剪映的 `com.lveditor.draft` 目录，并把 `root_meta_info.json` 里的 `all_draft_store` 条目合并进该目录的同名文件，即可注册工程。也可以直接把 `--jianying-dir` 指向 `com.lveditor.draft`：工具会按 draft id 合并 `root_meta_info.json`，不会清掉已有工程；如果同名目录里已经是另一个 draft id，导出会拒绝覆盖并提示换一个 `--draft-name`。草稿里每个镜头一段，`target_timerange` 与 `source_timerange` 都以微秒记录；没有字幕时只有视频轨，有 ASR 字幕时追加一条文字轨，并按计划字幕区放置。
 
 **目标版本**：明文 `draft_content.json`，`version: 360000`、`new_version: "75.0.0"`，对应剪映专业版 5.x/6.x 读取的格式。**剪映 10.1 把时间线存进加密的 `draft_info.json`，本工具不写、不解密这个文件**，因此不要把这份明文工程当成 10.1 可直接导入的工程。本次构建没有在运行中的剪映里做导入实测，兼容性说明见 [docs/demo-results.json](docs/demo-results.json)；切点对齐是按 `tc_in`/`tc_out` 逐段换算微秒得到的，不依赖估计。
 

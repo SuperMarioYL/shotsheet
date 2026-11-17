@@ -53,6 +53,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   track positioned from the planned caption band.
 - `--dry-run` prints the planned canvas, track and per-segment timeline/source
   tree without writing anything.
+- An existing `root_meta_info.json` in the output root is merged by draft id,
+  so pointing `--jianying-dir` at a real 剪映 draft folder does not erase other
+  projects. A project folder that already holds a different draft is left
+  untouched and the export asks for another `--draft-name`.
 - Draft, track, material and segment ids are deterministic UUID5 values and the
   two timestamps are a fixed placeholder, so rerunning the same export produces
   byte-identical JSON.

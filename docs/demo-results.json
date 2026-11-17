@@ -99,7 +99,7 @@
     }
   },
   "verification": {
-    "test_suite": "72 tests",
+    "test_suite": "74 tests",
     "lint": "ruff check . and ruff format --check . pass",
     "jianying_tests": [
       "segment count equals shot count",
@@ -109,7 +109,8 @@
       "29.97 fps tc_out converts through the real frame rate",
       "rerunning the same export produces byte-identical JSON",
       "no text track when no captions exist",
-      "CLI dry-run writes nothing; CLI export writes the root layout"
+      "CLI dry-run writes nothing; CLI export writes the root layout",
+      "an existing root_meta_info.json is merged by draft id; a different draft folder is not overwritten"
     ]
   },
   "limitations": [

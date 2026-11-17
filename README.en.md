@@ -175,7 +175,7 @@ jianying/
    └─ draft_meta_info.json
 ```
 
-Copy the `<draft-name>` folder into Jianying's `com.lveditor.draft` directory and merge the `all_draft_store` entry from `root_meta_info.json` into that directory's file to register the project. Each shot is one segment; `target_timerange` and `source_timerange` are both in microseconds. With no captions the draft has only a video track; with ASR captions it adds a text track positioned from the planned caption band.
+Copy the `<draft-name>` folder into Jianying's `com.lveditor.draft` directory and merge the `all_draft_store` entry from `root_meta_info.json` into that directory's file to register the project. You can also point `--jianying-dir` straight at `com.lveditor.draft`: the exporter merges `root_meta_info.json` by draft id and does not erase existing projects. If the folder already holds a different draft id, the export refuses to overwrite it and asks for another `--draft-name`. Each shot is one segment; `target_timerange` and `source_timerange` are both in microseconds. With no captions the draft has only a video track; with ASR captions it adds a text track positioned from the planned caption band.
 
 **Target version:** plaintext `draft_content.json`, `version: 360000` and `new_version: "75.0.0"`, the format read by Jianying Professional 5.x/6.x. **Jianying 10.1 stores its timeline in an encrypted `draft_info.json`; this tool neither writes nor decrypts that file**, so do not treat this output as a 10.1-importable project. This build did not perform a live import inside a running Jianying install; the compatibility note is in [docs/demo-results.json](docs/demo-results.json). Cut alignment is computed exact from `tc_in`/`tc_out` to microseconds rather than estimated.
 
